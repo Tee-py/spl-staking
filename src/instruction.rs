@@ -18,7 +18,13 @@ pub enum Instruction {
         /// Minimum amount of tokens to be staked
         minimum_stake_amount: u64,
         /// Minimum amount of time interval(in seconds) for locking
-        minimum_lock_duration: u64
+        minimum_lock_duration: u64,
+        /// APY For normal staking (decimals = 1)
+        normal_staking_apy: u64,
+        /// APY For locked staking (decimals = 1)
+        locked_staking_apy: u64,
+        /// Penalty for early withdrawal in locked staking (decimals = 1)
+        early_withdrawal_fee: u64,
     }
 }
 
@@ -28,11 +34,20 @@ impl Instruction {
         Ok(
             match tag {
                 0 => {
-                    let rest = array_ref![rest, 0, 16];
-                    let (part1, part2) = array_refs![rest, 8, 8];
+                    let rest = array_ref![rest, 0, 40];
+                    let (
+                        min_stk_dst,
+                        min_lk_dst,
+                        ns_apy_dst,
+                        ls_apy_dst,
+                        e_wdf_dst
+                    ) = array_refs![rest, 8, 8, 8, 8, 8];
                     Self::Init {
-                        minimum_stake_amount: Self::unpack_u64(part1)?,
-                        minimum_lock_duration: Self::unpack_u64(part2)?
+                        minimum_stake_amount: Self::unpack_u64(min_stk_dst)?,
+                        minimum_lock_duration: Self::unpack_u64(min_lk_dst)?,
+                        normal_staking_apy: Self::unpack_u64(ns_apy_dst)?,
+                        locked_staking_apy: Self::unpack_u64(ls_apy_dst)?,
+                        early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?
                     }
                 }
                 _ => {

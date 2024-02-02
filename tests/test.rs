@@ -67,9 +67,15 @@ async fn test_processor() {
     let token_acct_keypair = Keypair::new();
     let minimum_stake_amount: u64 = 100 * 10u64.pow(mint_decimals as u32);
     let minimum_lock_duration: u64 = 100; // 100 seconds
+    let normal_staking_apy: u64 = 100; // 10% per year
+    let locked_staking_apy: u64 = 200; // 20% per year
+    let early_withdrawal_fee: u64 = 50; // 5% per withdrawal
     let mut instruction_data = vec![0];
     instruction_data.extend(minimum_stake_amount.to_le_bytes().iter());
     instruction_data.extend(minimum_lock_duration.to_le_bytes().iter());
+    instruction_data.extend(normal_staking_apy.to_le_bytes().iter());
+    instruction_data.extend(locked_staking_apy.to_le_bytes().iter());
+    instruction_data.extend(early_withdrawal_fee.to_le_bytes().iter());
     let mut transaction = Transaction::new_with_payer(
         &[
             system_instruction::create_account(
@@ -141,6 +147,26 @@ async fn test_processor() {
     assert_eq!(
         contract_data.stake_token_mint,
         mint_pubkey
+    );
+    assert_eq!(
+        contract_data.normal_staking_apy,
+        normal_staking_apy
+    );
+    assert_eq!(
+        contract_data.locked_staking_apy,
+        locked_staking_apy
+    );
+    assert_eq!(
+        contract_data.early_withdrawal_fee,
+        early_withdrawal_fee
+    );
+    assert_eq!(
+        contract_data.total_staked,
+        0
+    );
+    assert_eq!(
+        contract_data.total_earned,
+        0
     );
     assert_eq!(
         token_data.owner,

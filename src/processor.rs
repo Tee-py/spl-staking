@@ -26,9 +26,18 @@ impl Processor {
     ) -> ProgramResult {
         let instruction = ContractInstruction::unpack(instruction_data)?;
         match instruction {
-            ContractInstruction::Init { minimum_stake_amount, minimum_lock_duration } => {
+            ContractInstruction::Init {
+                minimum_stake_amount, minimum_lock_duration,
+                normal_staking_apy, locked_staking_apy,
+                early_withdrawal_fee
+            } => {
                 msg!("Staking [Info]: Init contract instruction");
-                Self::init(program_id, accounts, minimum_stake_amount, minimum_lock_duration)
+                Self::init(
+                    program_id, accounts,
+                    minimum_stake_amount, minimum_lock_duration,
+                    normal_staking_apy, locked_staking_apy,
+                    early_withdrawal_fee
+                )
             },
         }
     }
@@ -37,7 +46,10 @@ impl Processor {
         program_id: &Pubkey,
         accounts: &[AccountInfo],
         minimum_stake_amount: u64,
-        minimum_lock_duration: u64
+        minimum_lock_duration: u64,
+        normal_staking_apy: u64,
+        locked_staking_apy: u64,
+        early_withdrawal_fee: u64
     ) -> ProgramResult {
         // Get all accounts sent to the instruction
         let accounts_info_iter = &mut accounts.iter();
@@ -123,6 +135,11 @@ impl Processor {
         contract_data.minimum_stake_amount = minimum_stake_amount;
         contract_data.minimum_lock_duration = minimum_lock_duration;
         contract_data.stake_token_account = *token_account.key;
+        contract_data.normal_staking_apy = normal_staking_apy;
+        contract_data.locked_staking_apy = locked_staking_apy;
+        contract_data.early_withdrawal_fee = early_withdrawal_fee;
+        contract_data.total_earned = 0;
+        contract_data.total_staked = 0;
 
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
         Ok(())
