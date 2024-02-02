@@ -10,10 +10,11 @@ use solana_program::{
     //clock::Clock,
     msg,
 };
+use solana_program::clock::Clock;
 use solana_program::rent::Rent;
-//use spl_token::state::{Account as TokenAccount, Mint};
+use spl_token::state::{Account as TokenAccount};
 use crate::instruction::Instruction as ContractInstruction;
-use crate::state::{ContractData, StakeType};
+use crate::state::{ContractData, StakeType, UserData};
 
 
 pub struct Processor;
@@ -163,8 +164,140 @@ impl Processor {
         accounts: &[AccountInfo],
         stake_type: StakeType,
         amount: u64,
-        lock_duration: u64
+        _lock_duration: u64
     ) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let user_info = next_account_info(account_info_iter)?;
+        let user_token_account_info = next_account_info(account_info_iter)?;
+        let user_data_account_info = next_account_info(account_info_iter)?;
+        let contract_token_account_info = next_account_info(account_info_iter)?;
+        let contract_data_account_info = next_account_info(account_info_iter)?;
+        let system_program_info = next_account_info(account_info_iter)?;
+
+        let contract_data = ContractData::unpack_from_slice(&contract_data_account_info.data.borrow())?;
+        let user_token_account_data = TokenAccount::unpack_from_slice(&user_token_account_info.data.borrow())?;
+        let contract_token_account_data = TokenAccount::unpack_from_slice(&contract_token_account_info.data.borrow())?;
+
+
+        if !user_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature.into())
+        }
+        // Verify user and contract token accounts
+        if user_token_account_data.owner != *user_info.key {
+            msg!("Staking [Error]: Invalid user token account");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if user_token_account_data.mint != contract_data.stake_token_mint {
+            msg!("Staking [Error]: Invalid user token account mint");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if user_token_account_data.amount < contract_data.minimum_stake_amount {
+            msg!("Staking [Error]: Insufficient user token balance for staking");
+            return Err(ProgramError::InsufficientFunds.into())
+        }
+
+        // verify the contract data pda
+        let (contract_data_pda, _c_bump) = Pubkey::find_program_address(
+            &[b"spl_staking", contract_data.admin_pubkey.as_ref(), contract_data.stake_token_mint.as_ref()],
+            program_id
+        );
+        if &contract_data_pda != contract_data_account_info.key {
+            msg!("Staking [Error]: Invalid contract data account");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if contract_token_account_info.key != &contract_data.stake_token_account {
+            msg!("Staking [Error]: Invalid contract token account");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if contract_data.stake_token_mint != contract_token_account_data.mint {
+            msg!("Staking [Error]: Invalid contract token account mint");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if contract_data_pda != contract_token_account_data.owner {
+            msg!("Staking [Error]: Invalid contract token account owner");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        match stake_type {
+            StakeType::NORMAL => Self::perform_normal_staking(
+                program_id,
+                user_info,
+                user_token_account_data,
+                user_data_account_info,
+                system_program_info,
+                contract_token_account_data,
+                contract_data,
+                amount
+            ),
+            StakeType::LOCKED => {msg!("Staking [Info]: Locked Staking");Ok(())}
+        }
+    }
+    fn perform_normal_staking<'a>(
+        program_id: &Pubkey,
+        user_info: &AccountInfo<'a>,
+        _user_token_account: TokenAccount,
+        user_data_account: &AccountInfo<'a>,
+        system_program_info: &AccountInfo<'a>,
+        _contract_token_account: TokenAccount,
+        _contract_data: ContractData,
+        _amount: u64
+    ) -> ProgramResult {
+        msg!("Staking [Info]: Performing Normal Staking");
+        // verify the user data account
+        let seeds: &[&[u8]] = &[b"spl_staking_normal_user", user_info.key.as_ref()];
+        let (ns_user_data_pda, bump) = Pubkey::find_program_address(
+            seeds,
+            program_id
+        );
+        if *user_data_account.key != ns_user_data_pda {
+            msg!("Staking [Error]: User data account and generated pda mismatch");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+
+        let user_data = if user_data_account.data_len() == 0 {
+            // Create the PDA Account
+            let rent = &Rent::get()?;
+            let required_lamports = rent
+                .minimum_balance(UserData::LEN)
+                .max(1)
+                .saturating_sub(user_data_account.lamports());
+            let signer_seeds: &[&[u8]] = &[b"spl_staking_normal_user", user_info.key.as_ref(), &[bump]];
+            invoke_signed(
+                &system_instruction::create_account(
+                    user_info.key,
+                    &ns_user_data_pda,
+                    required_lamports,
+                    UserData::LEN as u64,
+                    program_id,
+                ),
+                &[
+                    user_info.clone(),
+                    user_data_account.clone(),
+                    system_program_info.clone(),
+                ],
+                &[signer_seeds],
+            )?;
+            let mut data = UserData::unpack_unchecked(
+                &user_data_account.data.borrow()
+            )?;
+            let clock = Clock::get()?;
+            let current_ts = clock.unix_timestamp as u64;
+            data.stake_type = StakeType::NORMAL;
+            data.owner_pubkey = *user_info.key;
+            data.is_initialized = false;
+            data.total_staked = 0;
+            data.interest_accrued = 0;
+            data.last_claim_ts = 0;
+            data.last_unstake_ts = 0;
+            data.lock_duration = 0;
+            data.stake_ts = current_ts;
+
+            data
+        } else {
+            UserData::unpack_from_slice(
+                &user_data_account.data.borrow()
+            )?
+        };
+        UserData::pack(user_data, &mut user_data_account.try_borrow_mut_data()?)?;
         Ok(())
     }
 }

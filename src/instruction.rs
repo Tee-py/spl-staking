@@ -37,6 +37,7 @@ pub enum Instruction {
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
     /// 6. `[writable]` The data account for the contract
+    /// 7. `[]` System program info
     Stake {
         stake_type: StakeType,
         amount: u64,
@@ -66,7 +67,7 @@ impl Instruction {
                         early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?
                     }
                 },
-                2 => {
+                1 => {
                     let rest = array_ref![rest, 0, 17];
                     let (
                         stake_type_dst,

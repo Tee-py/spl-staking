@@ -188,7 +188,10 @@ impl Pack for UserData {
         ) = mut_array_refs![dst, 1, 32, 8, 8, 8, 8, 8, 8, 8];
         is_init_dst[0] = self.is_initialized as u8;
         owner_pk_dst.copy_from_slice(self.owner_pubkey.as_ref());
-        stk_type_dst[0] = *self.stake_type as u8;
+        stk_type_dst[0] = match self.stake_type {
+            StakeType::NORMAL => 0,
+            StakeType::LOCKED => 1
+        };
         *lock_dur_dst = self.lock_duration.to_le_bytes();
         *tot_stk_dst = self.total_staked.to_le_bytes();
         *int_accr_dst = self.interest_accrued.to_le_bytes();
@@ -198,7 +201,7 @@ impl Pack for UserData {
     }
 
     fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
-        let src = array_ref![src, 0, ContractData::LEN];
+        let src = array_ref![src, 0, UserData::LEN];
         let (
             is_init_dst,
             owner_pk_dst,
