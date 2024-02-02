@@ -138,16 +138,20 @@ impl Pack for ContractData {
 /// 1. is_initialized [boolean]
 /// 2. owner_pubkey [Pubkey]
 /// 3. stake_type [StakeType]: Locked staking or Normal staking
+/// 4. lock_duration [u64]: Duration in seconds to lock funds (Only applies to locked staking)
 /// 4. total_staked [u64]: Total amount staked
 /// 5. interest_accrued [u64]: Total interest accrued but not withdrawn
+/// 6. stake_ts [u64]: Unix timestamp of the stake initialization
 /// 6. last_claim_ts [u64]: Last claimed time stamp
 /// 7. last_unstake_ts [u64]: Last unstake time stamp
 pub struct UserData {
     pub is_initialized: bool,
     pub owner_pubkey: Pubkey,
     pub stake_type: StakeType,
+    pub lock_duration: u64,
     pub total_staked: u64,
     pub interest_accrued: u64,
+    pub stake_ts: u64,
     pub last_claim_ts: u64,
     pub last_unstake_ts: u64
 }
@@ -157,6 +161,8 @@ impl Sealed for UserData {}
 impl UserData {
     pub const LEN: usize = 1
         + 32
+        + 8
+        + 8
         + 8
         + 8
         + 8
@@ -173,16 +179,20 @@ impl Pack for UserData {
             is_init_dst,
             owner_pk_dst,
             stk_type_dst,
+            lock_dur_dst,
             tot_stk_dst,
             int_accr_dst,
+            stake_ts_dst,
             last_clm_dst,
             last_unst_dst
-        ) = mut_array_refs![dst, 1, 32, 8, 8, 8, 8, 8];
+        ) = mut_array_refs![dst, 1, 32, 8, 8, 8, 8, 8, 8, 8];
         is_init_dst[0] = self.is_initialized as u8;
         owner_pk_dst.copy_from_slice(self.owner_pubkey.as_ref());
         stk_type_dst[0] = *self.stake_type as u8;
+        *lock_dur_dst = self.lock_duration.to_le_bytes();
         *tot_stk_dst = self.total_staked.to_le_bytes();
         *int_accr_dst = self.interest_accrued.to_le_bytes();
+        *stake_ts_dst = self.stake_ts.to_le_bytes();
         *last_clm_dst = self.last_claim_ts.to_le_bytes();
         *last_unst_dst = self.last_unstake_ts.to_le_bytes()
     }
@@ -193,11 +203,13 @@ impl Pack for UserData {
             is_init_dst,
             owner_pk_dst,
             stk_type_dst,
+            lock_dur_dst,
             tot_stk_dst,
             int_accr_dst,
+            stake_ts_dst,
             last_clm_dst,
             last_unst_dst
-        ) = array_refs![src, 1, 32, 8, 8, 8, 8, 8];
+        ) = array_refs![src, 1, 32, 8, 8, 8, 8, 8, 8, 8];
         let is_initialized = match is_init_dst[0] {
             0 => false,
             1 => true,
@@ -212,8 +224,10 @@ impl Pack for UserData {
             is_initialized,
             stake_type,
             owner_pubkey: Pubkey::new_from_array(*owner_pk_dst),
+            lock_duration: u64::from_le_bytes(*lock_dur_dst),
             total_staked: u64::from_le_bytes(*tot_stk_dst),
             interest_accrued: u64::from_le_bytes(*int_accr_dst),
+            stake_ts: u64::from_le_bytes(*stake_ts_dst),
             last_claim_ts: u64::from_le_bytes(*last_clm_dst),
             last_unstake_ts: u64::from_le_bytes(*last_unst_dst)
         })
