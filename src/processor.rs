@@ -7,7 +7,7 @@ use solana_program::{
     system_instruction,
     sysvar::{Sysvar},
     program::{invoke_signed, invoke},
-    clock::Clock,
+    //clock::Clock,
     msg,
 };
 use solana_program::rent::Rent;
@@ -43,10 +43,10 @@ impl Processor {
         let accounts_info_iter = &mut accounts.iter();
         let admin = next_account_info(accounts_info_iter)?;
         let data_account = next_account_info(accounts_info_iter)?;
-        let mint_token_account = next_account_info(accounts_info_iter)?;
-        let mint_account = next_account_info(accounts_info_iter)?;
-        let token_program_account = next_account_info(accounts_info_iter)?;
-        let rent_info = next_account_info(accounts_info_iter)?;
+        let token_account = next_account_info(accounts_info_iter)?;
+        let mint_info = next_account_info(accounts_info_iter)?;
+        let token_program_info = next_account_info(accounts_info_iter)?;
+        // let rent_info = next_account_info(accounts_info_iter)?;
         let system_program_account = next_account_info(accounts_info_iter)?;
 
         // perform necessary checks
@@ -65,7 +65,7 @@ impl Processor {
         let seeds: &[&[u8]] = &[
             b"spl_staking",
             admin.key.as_ref(),
-            mint_account.key.as_ref()
+            mint_info.key.as_ref()
         ];
         let (pda_addr, pda_bump) = Pubkey::find_program_address(seeds, program_id);
         if &pda_addr != data_account.key {
@@ -77,7 +77,7 @@ impl Processor {
             .minimum_balance(ContractData::LEN)
             .max(1)
             .saturating_sub(data_account.lamports());
-        let contract_seeds: &[&[u8]] = &[b"spl_staking", admin.key.as_ref(), mint_account.key.as_ref(), &[pda_bump]];
+        let contract_seeds: &[&[u8]] = &[b"spl_staking", admin.key.as_ref(), mint_info.key.as_ref(), &[pda_bump]];
         invoke_signed(
             &system_instruction::create_account(
                 admin.key,
@@ -89,62 +89,36 @@ impl Processor {
             &[
                 admin.clone(),
                 data_account.clone(),
-                mint_account.clone(),
+                mint_info.clone(),
                 system_program_account.clone(),
             ],
             &[contract_seeds],
         )?;
 
-        // Create a token account to store staked tokens and rewards
-        let token_acct_seeds: &[&[u8]] = &[
-            b"spl_staking_token_account",
-            admin.key.as_ref()
-        ];
-        let (pda_token_acct, bump) = Pubkey::find_program_address(token_acct_seeds, program_id);
-        if &pda_token_acct != mint_token_account.key {
-            msg!("Staking [Error]: Derived token account address mismatch");
-            return Err(ProgramError::InvalidAccountData.into())
-        }
-        let required_lamports = rent
-            .minimum_balance(TokenAccount::LEN)
-            .max(1);
-        let create_acct_ix = system_instruction::create_account(
+        // Change ownership of the token account
+        let change_owner_ix = spl_token::instruction::set_authority(
+            &spl_token::id(),
+            token_account.key,
+            Some(&pda_addr),
+            spl_token::instruction::AuthorityType::AccountOwner,
             admin.key,
-            &pda_token_acct,
-            required_lamports,
-            ContractData::LEN as u64,
-            program_id,
-        );
-        let signer_seeds: &[&[u8]] = &[b"spl_staking_token_account", admin.key.as_ref(), &[bump]];
-        invoke_signed(
-            &create_acct_ix,
-            &[admin.clone(), mint_token_account.clone()],
-            &[signer_seeds]
+            &[&admin.key]
         )?;
-        let init_acct_ix = spl_token::instruction::initialize_account(
-            &spl_token::ID,
-            &pda_token_acct,
-            mint_account.key,
-            data_account.key
-        )?;
-        invoke_signed(
-            &init_acct_ix,
+        invoke(
+            &change_owner_ix,
             &[
-                mint_token_account.clone(),
-                mint_account.clone(),
-                data_account.clone(),
-                rent_info.clone(),
-                token_program_account.clone()
+                token_account.clone(),
+                admin.clone(),
+                token_program_info.clone(),
             ],
-            &[signer_seeds]
         )?;
         let mut contract_data = ContractData::unpack_unchecked(&data_account.data.borrow())?;
         contract_data.is_initialized = true;
         contract_data.admin_pubkey = *admin.key;
-        contract_data.stake_token_mint = *mint_account.key;
+        contract_data.stake_token_mint = *mint_info.key;
         contract_data.minimum_stake_amount = minimum_stake_amount;
         contract_data.minimum_lock_duration = minimum_lock_duration;
-        contract_data.stake_token_account = pda_token_acct;
+        contract_data.stake_token_account = *token_account.key;
 
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
         Ok(())
