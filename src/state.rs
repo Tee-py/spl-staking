@@ -19,6 +19,7 @@ pub struct ContractData {
     pub is_initialized: bool,
     pub admin_pubkey: Pubkey,
     pub stake_token_mint: Pubkey,
+    pub stake_token_account: Pubkey,
     pub minimum_stake_amount: u64,
     pub minimum_lock_duration: u64
 }
