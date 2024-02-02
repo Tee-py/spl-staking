@@ -111,7 +111,12 @@ impl Processor {
                 token_program_info.clone(),
             ],
         )?;
+
+        // Update contract data
         let mut contract_data = ContractData::unpack_unchecked(&data_account.data.borrow())?;
+        if contract_data.is_initialized {
+            return Err(ProgramError::AccountAlreadyInitialized.into())
+        }
         contract_data.is_initialized = true;
         contract_data.admin_pubkey = *admin.key;
         contract_data.stake_token_mint = *mint_info.key;
