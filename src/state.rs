@@ -5,6 +5,11 @@ use solana_program::{
 use arrayref::{array_mut_ref, array_ref, array_refs, mut_array_refs};
 use solana_program::program_error::ProgramError;
 
+pub enum StakeType {
+    NORMAL,
+    LOCKED
+}
+
 
 /// Struct for packing and unpacking contract data
 ///
@@ -121,6 +126,96 @@ impl Pack for ContractData {
             early_withdrawal_fee: u64::from_le_bytes(*e_w_fee_dst),
             total_staked: u64::from_le_bytes(*tot_stk_dst),
             total_earned: u64::from_le_bytes(*tot_earn_dst)
+        })
+    }
+}
+
+
+/// Struct for packing and unpacking user data
+///
+/// Fields [All are Public]
+///
+/// 1. is_initialized [boolean]
+/// 2. owner_pubkey [Pubkey]
+/// 3. stake_type [StakeType]: Locked staking or Normal staking
+/// 4. total_staked [u64]: Total amount staked
+/// 5. interest_accrued [u64]: Total interest accrued but not withdrawn
+/// 6. last_claim_ts [u64]: Last claimed time stamp
+/// 7. last_unstake_ts [u64]: Last unstake time stamp
+pub struct UserData {
+    pub is_initialized: bool,
+    pub owner_pubkey: Pubkey,
+    pub stake_type: StakeType,
+    pub total_staked: u64,
+    pub interest_accrued: u64,
+    pub last_claim_ts: u64,
+    pub last_unstake_ts: u64
+}
+
+impl Sealed for UserData {}
+
+impl UserData {
+    pub const LEN: usize = 1
+        + 32
+        + 8
+        + 8
+        + 8
+        + 8
+        + 8;
+}
+
+impl Pack for UserData {
+    const LEN: usize = UserData::LEN;
+
+    fn pack_into_slice(&self, dst: &mut [u8]) {
+        let dst = array_mut_ref![dst, 0, UserData::LEN];
+        let (
+            is_init_dst,
+            owner_pk_dst,
+            stk_type_dst,
+            tot_stk_dst,
+            int_accr_dst,
+            last_clm_dst,
+            last_unst_dst
+        ) = mut_array_refs![dst, 1, 32, 8, 8, 8, 8, 8];
+        is_init_dst[0] = self.is_initialized as u8;
+        owner_pk_dst.copy_from_slice(self.owner_pubkey.as_ref());
+        stk_type_dst[0] = *self.stake_type as u8;
+        *tot_stk_dst = self.total_staked.to_le_bytes();
+        *int_accr_dst = self.interest_accrued.to_le_bytes();
+        *last_clm_dst = self.last_claim_ts.to_le_bytes();
+        *last_unst_dst = self.last_unstake_ts.to_le_bytes()
+    }
+
+    fn unpack_from_slice(src: &[u8]) -> Result<Self, ProgramError> {
+        let src = array_ref![src, 0, ContractData::LEN];
+        let (
+            is_init_dst,
+            owner_pk_dst,
+            stk_type_dst,
+            tot_stk_dst,
+            int_accr_dst,
+            last_clm_dst,
+            last_unst_dst
+        ) = array_refs![src, 1, 32, 8, 8, 8, 8, 8];
+        let is_initialized = match is_init_dst[0] {
+            0 => false,
+            1 => true,
+            _ => return Err(ProgramError::InvalidAccountData.into())
+        };
+        let stake_type = match stk_type_dst[0] {
+            0 => StakeType::NORMAL,
+            1 => StakeType::LOCKED,
+            _ => return Err(ProgramError::InvalidAccountData.into())
+        };
+        Ok(UserData {
+            is_initialized,
+            stake_type,
+            owner_pubkey: Pubkey::new_from_array(*owner_pk_dst),
+            total_staked: u64::from_le_bytes(*tot_stk_dst),
+            interest_accrued: u64::from_le_bytes(*int_accr_dst),
+            last_claim_ts: u64::from_le_bytes(*last_clm_dst),
+            last_unstake_ts: u64::from_le_bytes(*last_unst_dst)
         })
     }
 }
