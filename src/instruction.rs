@@ -1,5 +1,6 @@
 use arrayref::{array_ref, array_refs};
 use solana_program::program_error::ProgramError;
+use crate::state::StakeType;
 
 
 pub enum Instruction {
@@ -25,6 +26,21 @@ pub enum Instruction {
         locked_staking_apy: u64,
         /// Penalty for early withdrawal in locked staking (decimals = 1)
         early_withdrawal_fee: u64,
+    },
+
+    /// Stake tokens
+    ///
+    /// Accounts Expected
+    ///
+    /// 1. `[Signer]` The staking account
+    /// 2. `[writable]` The token account of the user
+    /// 3. `[writable]` The user data account for the contract
+    /// 4. `[writable]` The token account for the contract
+    /// 6. `[writable]` The data account for the contract
+    Stake {
+        stake_type: StakeType,
+        amount: u64,
+        lock_duration: u64
     }
 }
 
@@ -48,6 +64,24 @@ impl Instruction {
                         normal_staking_apy: Self::unpack_u64(ns_apy_dst)?,
                         locked_staking_apy: Self::unpack_u64(ls_apy_dst)?,
                         early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?
+                    }
+                },
+                2 => {
+                    let rest = array_ref![rest, 0, 17];
+                    let (
+                        stake_type_dst,
+                        amount_dst,
+                        lock_duration_dst
+                    ) = array_refs![rest, 1, 8, 8];
+                    let stake_type = match stake_type_dst[0] {
+                        0 => StakeType::NORMAL,
+                        1 => StakeType::LOCKED,
+                        _ => return Err(ProgramError::InvalidInstructionData.into())
+                    };
+                    Self::Stake {
+                        stake_type,
+                        amount: Self::unpack_u64(amount_dst)?,
+                        lock_duration: Self::unpack_u64(lock_duration_dst)?
                     }
                 }
                 _ => {

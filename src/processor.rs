@@ -13,7 +13,7 @@ use solana_program::{
 use solana_program::rent::Rent;
 //use spl_token::state::{Account as TokenAccount, Mint};
 use crate::instruction::Instruction as ContractInstruction;
-use crate::state::{ContractData};
+use crate::state::{ContractData, StakeType};
 
 
 pub struct Processor;
@@ -39,6 +39,19 @@ impl Processor {
                     early_withdrawal_fee
                 )
             },
+            ContractInstruction::Stake {
+                stake_type, amount,
+                lock_duration
+            } => {
+                msg!("Staking [Info]: Stake Instruction");
+                Self::stake(
+                    program_id,
+                    accounts,
+                    stake_type,
+                    amount,
+                    lock_duration
+                )
+            }
         }
     }
 
@@ -142,6 +155,16 @@ impl Processor {
         contract_data.total_staked = 0;
 
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
+        Ok(())
+    }
+
+    fn stake(
+        program_id: &Pubkey,
+        accounts: &[AccountInfo],
+        stake_type: StakeType,
+        amount: u64,
+        lock_duration: u64
+    ) -> ProgramResult {
         Ok(())
     }
 }
