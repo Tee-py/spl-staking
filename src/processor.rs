@@ -11,7 +11,7 @@ use solana_program::{
     msg,
 };
 use solana_program::rent::Rent;
-use spl_token::state::{Account as TokenAccount, Mint};
+//use spl_token::state::{Account as TokenAccount, Mint};
 use crate::instruction::Instruction as ContractInstruction;
 use crate::state::{ContractData};
 
@@ -46,7 +46,6 @@ impl Processor {
         let token_account = next_account_info(accounts_info_iter)?;
         let mint_info = next_account_info(accounts_info_iter)?;
         let token_program_info = next_account_info(accounts_info_iter)?;
-        // let rent_info = next_account_info(accounts_info_iter)?;
         let system_program_account = next_account_info(accounts_info_iter)?;
 
         // perform necessary checks

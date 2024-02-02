@@ -11,7 +11,9 @@ pub enum Instruction {
     /// 2. `[writable]` The data account for the contract which is a PDA
     /// 3. `[writable]` The token account for storing reward and staked tokens [A PDA]
     /// 4. `[]` The stake token mint address
-    /// 5. `[]` system program
+    /// 5. `[]` Token program address
+    /// 6. `[]` Rent info
+    /// 7. `[]` system program
     Init {
         /// Minimum amount of tokens to be staked
         minimum_stake_amount: u64,
