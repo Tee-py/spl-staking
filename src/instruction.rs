@@ -53,9 +53,7 @@ pub enum Instruction {
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
     /// 6. `[writable]` The data account for the contract
-    UnStake {
-        stake_type: StakeType
-    }
+    UnStake
 }
 
 impl Instruction {
@@ -99,14 +97,7 @@ impl Instruction {
                     }
                 },
                 2 => {
-                    let stake_type = match rest[0] {
-                        0 => StakeType::NORMAL,
-                        1 => StakeType::LOCKED,
-                        _ => return Err(ProgramError::InvalidInstructionData.into())
-                    };
-                    Self::UnStake {
-                        stake_type
-                    }
+                    Self::UnStake
                 }
                 _ => {
                     return Err(ProgramError::InvalidInstructionData.into())
