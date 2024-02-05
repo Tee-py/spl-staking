@@ -42,6 +42,19 @@ pub enum Instruction {
         stake_type: StakeType,
         amount: u64,
         lock_duration: u64
+    },
+
+    /// Unstake tokens
+    ///
+    /// Accounts Expected
+    ///
+    /// 1. `[Signer]` The staking account
+    /// 2. `[writable]` The token account of the user
+    /// 3. `[writable]` The user data account for the contract
+    /// 4. `[writable]` The token account for the contract
+    /// 6. `[writable]` The data account for the contract
+    UnStake {
+        stake_type: StakeType
     }
 }
 
@@ -83,6 +96,16 @@ impl Instruction {
                         stake_type,
                         amount: Self::unpack_u64(amount_dst)?,
                         lock_duration: Self::unpack_u64(lock_duration_dst)?
+                    }
+                },
+                2 => {
+                    let stake_type = match rest[0] {
+                        0 => StakeType::NORMAL,
+                        1 => StakeType::LOCKED,
+                        _ => return Err(ProgramError::InvalidInstructionData.into())
+                    };
+                    Self::UnStake {
+                        stake_type
                     }
                 }
                 _ => {
