@@ -268,3 +268,35 @@ pub async fn perform_stake(
     stake_txn.sign(&[&payer], recent_block_hash);
     banks_client.process_transaction(stake_txn).await.unwrap();
 }
+
+pub async fn perform_unstake(
+    program_id: Pubkey,
+    payer: &Keypair,
+    user_tkn_acct_pk: Pubkey,
+    contract_tkn_acct_pk: Pubkey,
+    user_data_acct_pk: Pubkey,
+    contract_data_acct_pk: Pubkey,
+    banks_client: & mut BanksClient,
+    recent_block_hash: Hash
+) {
+    let instruction_data = vec![2];
+    let mut unstake_txn = Transaction::new_with_payer(
+        &[
+            Instruction::new_with_bytes(
+                program_id,
+                &instruction_data,
+                vec![
+                    AccountMeta::new(payer.pubkey(), true),
+                    AccountMeta::new(user_tkn_acct_pk, false),
+                    AccountMeta::new(user_data_acct_pk, false),
+                    AccountMeta::new(contract_tkn_acct_pk, false),
+                    AccountMeta::new(contract_data_acct_pk, false),
+                    AccountMeta::new_readonly(spl_token::ID, false)
+                ]
+            )
+        ],
+        Some(&payer.pubkey())
+    );
+    unstake_txn.sign(&[&payer], recent_block_hash);
+    banks_client.process_transaction(unstake_txn).await.unwrap();
+}
