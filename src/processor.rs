@@ -285,7 +285,6 @@ impl Processor {
         let user_data = UserData::unpack_from_slice(&user_data_account_info.data.borrow())?;
         let user_token_account_data = TokenAccount::unpack_from_slice(&user_token_account_info.data.borrow())?;
         let contract_token_account_data = TokenAccount::unpack_from_slice(&contract_token_account_info.data.borrow())?;
-
         if !user_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature.into())
         }
@@ -395,15 +394,12 @@ impl Processor {
                 let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
                 contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
                 interest_accrued = interest_accrued.add(user_data.interest_accrued);
+                msg!("Staking[Info]: Interest Accrued: {}\nStake Duration: {}", interest_accrued, stake_duration);
                 let amount_out = user_data.total_staked.add(interest_accrued);
                 amount_out
             },
             StakeType::LOCKED => {
                 let stake_duration = current_ts - user_data.stake_ts;
-                if stake_duration < 86400 {
-                    msg!("Staking [Info]: Cannot Unstake before 24 hrs");
-                    return Err(ProgramError::InvalidAccountData.into());
-                }
                 let amount_out: u64;
                 if stake_duration >= user_data.lock_duration {
                     let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
@@ -414,6 +410,7 @@ impl Processor {
                     let early_unstake_charge = (contract_data.early_withdrawal_fee * user_data.total_staked)/1000;
                     amount_out = user_data.total_staked.saturating_sub(early_unstake_charge);
                 }
+                msg!("Staking [Info]: Amount Out: {} Total Staked: {}", amount_out, user_data.total_staked);
                 amount_out
             }
         };
@@ -438,6 +435,7 @@ impl Processor {
             contract_data.stake_token_mint.as_ref(),
             &[pda_bump]
         ];
+        msg!("About to send tokens");
         invoke_signed(
             &token_transfer_ix,
             &[
@@ -448,6 +446,7 @@ impl Processor {
             ],
             &[signer_seeds],
         )?;
+        msg!("Sent tokens");
         // Reset User Account and Contract Account
         contract_data.total_staked = contract_data.total_staked.saturating_sub(user_data.total_staked);
         user_data.total_staked = 0;

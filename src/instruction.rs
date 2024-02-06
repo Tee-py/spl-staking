@@ -32,7 +32,7 @@ pub enum Instruction {
     ///
     /// Accounts Expected
     ///
-    /// 1. `[Signer]` The staking account
+    /// 1. `[Signer]` The user signer
     /// 2. `[writable]` The token account of the user
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
@@ -48,11 +48,11 @@ pub enum Instruction {
     ///
     /// Accounts Expected
     ///
-    /// 1. `[Signer]` The staking account
+    /// 1. `[Signer]` The user signer
     /// 2. `[writable]` The token account of the user
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
-    /// 6. `[writable]` The data account for the contract
+    /// 5. `[writable]` The data account for the contract
     UnStake
 }
 
