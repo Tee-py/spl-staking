@@ -2,24 +2,22 @@ mod utils;
 
 use utils::{set_up_mint, get_user_data, get_contract_data, get_token_account_data};
 use std::ops::Add;
-use solana_program::hash::Hash;
+use solana_program::native_token::LAMPORTS_PER_SOL;
 use spl_staking::{entrypoint::process_instruction};
 use solana_program_test::*;
 use solana_sdk::{
-    instruction::{AccountMeta, Instruction},
-    system_program,
+    //instruction::{AccountMeta, Instruction},
+    //system_program,
     pubkey::Pubkey,
     signature::{Signer, keypair::Keypair},
-    transaction::Transaction,
+    //transaction::Transaction,
 };
-use solana_program::program_pack::{Pack, IsInitialized};
-use solana_program::system_instruction;
+// use solana_program::system_instruction;
+use solana_program::program_pack::{IsInitialized};
 use solana_program::rent::Rent;
-use solana_program::sysvar::rent;
-use spl_token::state::{Account as TokenAccount, Mint};
-use spl_staking::state::{ContractData, StakeType, UserData};
-
-
+//use spl_token::state::{Account as TokenAccount};
+use spl_staking::state::{StakeType};
+use crate::utils::{construct_init_txn, perform_stake, set_up_token_account, transfer_sol};
 
 #[tokio::test]
 async fn test_processor() {
@@ -32,12 +30,7 @@ async fn test_processor() {
         processor!(process_instruction),
     );
 
-    // let mut context = program_test.start_with_context().await;
-    // let mut banks_client = context.banks_client;
-    // let payer = context.payer;
-    // let recent_block_hash = context.last_blockhash;
     let (mut banks_client, payer, recent_block_hash) = program_test.start().await;
-    //let x = program_test.start_with_context().await;
     let rent = Rent::default();
     let payer_pubkey = payer.pubkey();
     let mint_pubkey = token_mint.pubkey();
@@ -65,42 +58,18 @@ async fn test_processor() {
     let normal_staking_apy: u64 = 100; // 10% per year
     let locked_staking_apy: u64 = 200; // 20% per year
     let early_withdrawal_fee: u64 = 50; // 5% per withdrawal
-    let mut instruction_data = vec![0];
-    instruction_data.extend(minimum_stake_amount.to_le_bytes().iter());
-    instruction_data.extend(minimum_lock_duration.to_le_bytes().iter());
-    instruction_data.extend(normal_staking_apy.to_le_bytes().iter());
-    instruction_data.extend(locked_staking_apy.to_le_bytes().iter());
-    instruction_data.extend(early_withdrawal_fee.to_le_bytes().iter());
-    let mut transaction = Transaction::new_with_payer(
-        &[
-            system_instruction::create_account(
-                &payer_pubkey,
-                &token_acct_keypair.pubkey(),
-                rent.minimum_balance(TokenAccount::LEN),
-                TokenAccount::LEN as u64,
-                &spl_token::id()
-            ),
-            spl_token::instruction::initialize_account(
-                &spl_token::id(),
-                &token_acct_keypair.pubkey(),
-                &mint_pubkey,
-                &payer_pubkey
-            ).unwrap(),
-            Instruction::new_with_bytes(
-                program_id,
-                &instruction_data,
-                vec![
-                    AccountMeta::new(payer.pubkey(), true),
-                    AccountMeta::new(data_acct_pda, false),
-                    AccountMeta::new(token_acct_keypair.pubkey(), false),
-                    AccountMeta::new_readonly(token_mint.pubkey(), false),
-                    AccountMeta::new_readonly(spl_token::id(), false),
-                    AccountMeta::new_readonly(rent::ID, false),
-                    AccountMeta::new_readonly(system_program::ID, false),
-                ],
-            )
-        ],
-        Some(&payer.pubkey()),
+    let mut transaction = construct_init_txn(
+        minimum_stake_amount,
+        minimum_lock_duration,
+        normal_staking_apy,
+        locked_staking_apy,
+        early_withdrawal_fee,
+        payer_pubkey,
+        token_acct_keypair.pubkey(),
+        rent,
+        mint_pubkey,
+        program_id,
+        data_acct_pda
     );
     transaction.sign(&[&payer, &token_acct_keypair], recent_block_hash);
     banks_client.process_transaction(transaction).await.unwrap();
@@ -176,59 +145,33 @@ async fn test_processor() {
     );
     let amount = 100*10u64.pow(mint_decimals as u32);
     let lock_duration: u64 = 0;
-    let mut instruction_data = vec![1, 0];
-    instruction_data.extend(amount.to_le_bytes().iter());
-    instruction_data.extend(lock_duration.to_le_bytes().iter());
+
     // Set Up Claimer token account
-    let user_token_acct_txn = Transaction::new_signed_with_payer(
-        &[
-            system_instruction::create_account(
-                &payer_pubkey,
-                &user_token_account_keypair.pubkey(),
-                rent.minimum_balance(TokenAccount::LEN),
-                TokenAccount::LEN as u64,
-                &spl_token::id()
-            ),
-            spl_token::instruction::initialize_account(
-                &spl_token::id(),
-                &user_token_account_keypair.pubkey(),
-                &mint_pubkey,
-                &payer_pubkey
-            ).unwrap(),
-            spl_token::instruction::mint_to(
-                &spl_token::id(),
-                &mint_pubkey,
-                &user_token_account_keypair.pubkey(),
-                &payer_pubkey,
-                &[],
-                1000 * 10u64.pow(mint_decimals as u32)
-            ).unwrap()
-        ],
-        Some(&payer_pubkey),
-        &[&payer, &user_token_account_keypair],
+    let mint_amount = 1000 * 10u64.pow(mint_decimals as u32);
+    set_up_token_account(
+        &payer,
+        &user_token_account_keypair,
+        None,
+        rent.clone(),
+        mint_pubkey.clone(),
+        mint_amount,
+        &mut banks_client,
         recent_block_hash
-    );
-    banks_client.process_transaction(user_token_acct_txn).await.unwrap();
-    let mut stake_txn = Transaction::new_with_payer(
-        &[
-            Instruction::new_with_bytes(
-                program_id,
-                &instruction_data,
-                vec![
-                    AccountMeta::new(payer_pubkey, true),
-                    AccountMeta::new(user_token_account_keypair.pubkey(), false),
-                    AccountMeta::new(user_data_account_pubkey, false),
-                    AccountMeta::new(token_acct_keypair.pubkey(), false),
-                    AccountMeta::new(data_acct_pda, false),
-                    AccountMeta::new_readonly(spl_token::ID, false),
-                    AccountMeta::new_readonly(system_program::ID, false)
-                ]
-            )
-        ],
-        Some(&payer_pubkey)
-    );
-    stake_txn.sign(&[&payer], recent_block_hash);
-    banks_client.process_transaction(stake_txn).await.unwrap();
+    ).await;
+    // perform normal stake
+    perform_stake(
+        program_id.clone(),
+        &payer,
+        user_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        user_data_account_pubkey.clone(),
+        data_acct_pda.clone(),
+        StakeType::NORMAL as u8,
+        amount,
+        lock_duration,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
     // Verify user data fields and token account balances
     let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await;
     let contract_token_data = get_token_account_data(&token_acct_keypair.pubkey(), &mut banks_client).await;
@@ -243,29 +186,19 @@ async fn test_processor() {
     // --------------- Normal Re-staking Test ----------------------
     let re_stake_amount = 10*10u64.pow(mint_decimals as u32);
     let lock_duration: u64 = 0;
-    let mut instruction_data = vec![1, 0];
-    instruction_data.extend(re_stake_amount.to_le_bytes().iter());
-    instruction_data.extend(lock_duration.to_le_bytes().iter());
-    let mut re_stake_txn = Transaction::new_with_payer(
-        &[
-            Instruction::new_with_bytes(
-                program_id,
-                &instruction_data,
-                vec![
-                    AccountMeta::new(payer_pubkey, true),
-                    AccountMeta::new(user_token_account_keypair.pubkey(), false),
-                    AccountMeta::new(user_data_account_pubkey, false),
-                    AccountMeta::new(token_acct_keypair.pubkey(), false),
-                    AccountMeta::new(data_acct_pda, false),
-                    AccountMeta::new_readonly(spl_token::ID, false),
-                    AccountMeta::new_readonly(system_program::ID, false)
-                ]
-            )
-        ],
-        Some(&payer_pubkey)
-    );
-    re_stake_txn.sign(&[&payer], recent_block_hash);
-    banks_client.process_transaction(re_stake_txn).await.unwrap();
+    perform_stake(
+        program_id.clone(),
+        &payer,
+        user_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        user_data_account_pubkey.clone(),
+        data_acct_pda.clone(),
+        StakeType::NORMAL as u8,
+        re_stake_amount,
+        lock_duration,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
     // Verify Side Effects
     let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await;
     let contract_token_data = get_token_account_data(&token_acct_keypair.pubkey(), &mut banks_client).await;
@@ -275,5 +208,43 @@ async fn test_processor() {
     assert_eq!(contract_token_data.amount, amount.add(re_stake_amount));
 
     // --------------- Locked Staking Tests -----------------
-
+    let new_payer = Keypair::new();
+    let (new_payer_data_acct_pk, _bump) = Pubkey::find_program_address(
+        &[b"spl_staking_user", new_payer.pubkey().as_ref()],
+        &program_id
+    );
+    let payer_token_account_keypair = Keypair::new();
+    let mint_amount = 1000 * 10u64.pow(mint_decimals as u32);
+    let stake_amount = 50*10u64.pow(mint_decimals as u32);
+    let lock_duration = 24*60*60;
+    transfer_sol(
+        &payer,
+        new_payer.pubkey().clone(),
+        10*LAMPORTS_PER_SOL,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
+    set_up_token_account(
+        &payer,
+        &payer_token_account_keypair,
+        Some(new_payer.pubkey().clone()),
+        rent.clone(),
+        mint_pubkey.clone(),
+        mint_amount,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
+    perform_stake(
+        program_id.clone(),
+        &new_payer,
+        payer_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        new_payer_data_acct_pk.clone(),
+        data_acct_pda.clone(),
+        StakeType::LOCKED as u8,
+        stake_amount,
+        lock_duration,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
 }
