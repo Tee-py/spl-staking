@@ -1,4 +1,8 @@
+mod utils;
+
+use utils::{set_up_mint, get_user_data, get_contract_data, get_token_account_data};
 use std::ops::Add;
+use solana_program::hash::Hash;
 use spl_staking::{entrypoint::process_instruction};
 use solana_program_test::*;
 use solana_sdk::{
@@ -15,37 +19,6 @@ use solana_program::sysvar::rent;
 use spl_token::state::{Account as TokenAccount, Mint};
 use spl_staking::state::{ContractData, StakeType, UserData};
 
-
-async fn get_user_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> UserData {
-    let user_account = banks_client
-        .get_account(pubkey.clone())
-        .await
-        .expect("get_account")
-        .expect("user data account not found");
-    UserData::unpack_from_slice(&user_account.data).unwrap()
-}
-
-async fn get_contract_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> ContractData {
-    let contract_account = banks_client
-        .get_account(pubkey.clone())
-        .await
-        .expect("get_account")
-        .expect("contract pda data account not found");
-    ContractData::unpack_from_slice(
-        &contract_account.data
-    ).unwrap()
-}
-
-async fn get_token_account_data(pubkey: &Pubkey, banks_client: & mut BanksClient) -> TokenAccount {
-    let token_account = banks_client
-        .get_account(pubkey.clone())
-        .await
-        .expect("get_account")
-        .expect("token account not found");
-    TokenAccount::unpack_from_slice(
-        &token_account.data
-    ).unwrap()
-}
 
 
 #[tokio::test]
@@ -76,29 +49,14 @@ async fn test_processor() {
     );
 
     // ------------ Token mint Setup -----------
-    let mint_txn = Transaction::new_signed_with_payer(
-        &[
-            system_instruction::create_account(
-                &payer_pubkey,
-                &mint_pubkey,
-                rent.minimum_balance(Mint::LEN),
-                Mint::LEN as u64,
-                &spl_token::id()
-            ),
-            spl_token::instruction::initialize_mint(
-                &spl_token::id(),
-                &mint_pubkey,
-                &payer_pubkey,
-                None,
-                mint_decimals as u8
-            ).unwrap()
-        ],
-        Some(&payer_pubkey),
-        &[&payer, &token_mint],
-        recent_block_hash
-    );
-    banks_client.process_transaction(mint_txn).await.unwrap();
-
+    set_up_mint(
+        &payer,
+        &token_mint,
+        &mut banks_client,
+        recent_block_hash,
+        rent.clone(),
+        mint_decimals
+    ).await;
     // --------------- Init contract test ----------------------
     // --------------- CASE 1 [SUCCESS] ------------------------
     let token_acct_keypair = Keypair::new();

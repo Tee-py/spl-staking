@@ -12,7 +12,7 @@ use solana_program::{
     msg,
 };
 use solana_program::clock::Clock;
-use solana_program::instruction::AccountMeta;
+//use solana_program::instruction::AccountMeta;
 use solana_program::rent::Rent;
 use spl_token::state::{Account as TokenAccount};
 use crate::instruction::Instruction as ContractInstruction;
@@ -369,7 +369,7 @@ impl Processor {
     ) -> ProgramResult {
         // verify the user data account
         let seeds: &[&[u8]] = &[b"spl_staking_user", user_info.key.as_ref()];
-        let (ns_user_data_pda, bump) = Pubkey::find_program_address(
+        let (ns_user_data_pda, _bump) = Pubkey::find_program_address(
             seeds,
             program_id
         );
@@ -385,34 +385,37 @@ impl Processor {
             &user_data_account.data.borrow()
         )?;
 
-        let  (amount_out) = if stake_type == StakeType::NORMAL {
-            let stake_duration = current_ts - user_data.stake_ts;
-            if stake_duration < 86400 {
-                msg!("Staking [Info]: Cannot Unstake before 24 hrs");
-                return Err(ProgramError::InvalidAccountData.into());
-            }
-            let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
-            contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
-            interest_accrued = interest_accrued.add(user_data.interest_accrued);
-            let amount_out = user_data.total_staked.add(interest_accrued);
-            amount_out
-        } else {
-            let stake_duration = current_ts - user_data.stake_ts;
-            if stake_duration < 86400 {
-                msg!("Staking [Info]: Cannot Unstake before 24 hrs");
-                return Err(ProgramError::InvalidAccountData.into());
-            }
-            let amount_out: u64;
-            if stake_duration >= user_data.lock_duration {
+        let  amount_out = match stake_type {
+            StakeType::NORMAL => {
+                let stake_duration = current_ts - user_data.stake_ts;
+                if stake_duration < 86400 {
+                    msg!("Staking [Info]: Cannot Unstake before 24 hrs");
+                    return Err(ProgramError::InvalidAccountData.into());
+                }
                 let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
                 contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
                 interest_accrued = interest_accrued.add(user_data.interest_accrued);
-                amount_out = interest_accrued.add(user_data.total_staked);
-            } else {
-                let early_unstake_charge = (contract_data.early_withdrawal_fee * user_data.total_staked)/1000;
-                amount_out = user_data.total_staked.saturating_sub(early_unstake_charge);
+                let amount_out = user_data.total_staked.add(interest_accrued);
+                amount_out
+            },
+            StakeType::LOCKED => {
+                let stake_duration = current_ts - user_data.stake_ts;
+                if stake_duration < 86400 {
+                    msg!("Staking [Info]: Cannot Unstake before 24 hrs");
+                    return Err(ProgramError::InvalidAccountData.into());
+                }
+                let amount_out: u64;
+                if stake_duration >= user_data.lock_duration {
+                    let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
+                    contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
+                    interest_accrued = interest_accrued.add(user_data.interest_accrued);
+                    amount_out = interest_accrued.add(user_data.total_staked);
+                } else {
+                    let early_unstake_charge = (contract_data.early_withdrawal_fee * user_data.total_staked)/1000;
+                    amount_out = user_data.total_staked.saturating_sub(early_unstake_charge);
+                }
+                amount_out
             }
-            amount_out
         };
         // Transfer tokens to the user
         let seeds: &[&[u8]] = &[
@@ -440,7 +443,7 @@ impl Processor {
             &[
                 contract_token_account_info.clone(),
                 user_token_account_info.clone(),
-                AccountMeta::new(authority_pda, false),
+                contract_data_account.clone(),
                 token_program_info.clone(),
             ],
             &[signer_seeds],
