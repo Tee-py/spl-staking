@@ -247,4 +247,36 @@ async fn test_processor() {
         &mut banks_client,
         recent_block_hash
     ).await;
+    let expected_total_staked = amount.add(re_stake_amount).add(stake_amount);
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
+    let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
+    assert_eq!(user_data.total_staked, stake_amount);
+    assert_eq!(user_data.stake_type as u8, StakeType::LOCKED as u8);
+    assert_eq!(user_data.is_initialized, true);
+    assert_eq!(user_data.lock_duration, lock_duration);
+    assert_ne!(user_data.stake_ts, 0);
+    assert_eq!(user_data.owner_pubkey, new_payer.pubkey());
+    assert_eq!(contract_data.total_staked, expected_total_staked);
+    // ----------- Locked Re-staking Test --------------------
+    let re_stake_amount = 10*10u64.pow(mint_decimals as u32);
+    perform_stake(
+        program_id.clone(),
+        &new_payer,
+        payer_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        new_payer_data_acct_pk.clone(),
+        data_acct_pda.clone(),
+        StakeType::LOCKED as u8,
+        re_stake_amount,
+        lock_duration,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
+    let expected_total_staked = expected_total_staked.add(re_stake_amount);
+    let expected_user_total_staked = user_data.total_staked.add(re_stake_amount);
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
+    let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
+    assert_eq!(user_data.lock_duration, lock_duration);
+    assert_eq!(user_data.total_staked, expected_user_total_staked);
+    assert_eq!(contract_data.total_staked, expected_total_staked);
 }
