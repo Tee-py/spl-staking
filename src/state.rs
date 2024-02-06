@@ -23,7 +23,7 @@ pub enum StakeType {
 /// 6. minimum_stake_amount [u64]: Minimum number of tokens allowed for staking(in decimals format)
 /// 7. normal_staking_apy [u64]: % Interest per year for normal staking with decimal equals 1 (i.e. 10 = 1%)
 /// 8. locked_staking_apy [u64]: % Interest per year for locked staking with decimal equals 1 (i.e. 10 = 1%)
-/// 9. early_withdrawal_fee [u64]: This applies to locked staking (i.e. tokens locked for a particular period)
+/// 9. early_withdrawal_fee [u64]: % Charge for locked staking early withdrawal with decimal equals 1 (i.e. 10 = 1%)
 /// 10. total_staked [u64]: Total amount staked in the contract
 /// 11. total_earned [u64]: Total amount of interest earned on savings
 pub struct ContractData {
