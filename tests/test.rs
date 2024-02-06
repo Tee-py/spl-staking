@@ -12,7 +12,7 @@ use solana_sdk::{
 use solana_program::program_pack::{IsInitialized};
 use solana_program::rent::Rent;
 use spl_staking::state::{StakeType};
-use crate::utils::{construct_init_txn, perform_stake, set_up_token_account, transfer_sol};
+use crate::utils::{construct_init_txn, perform_stake, perform_unstake, set_up_token_account, transfer_sol};
 
 #[tokio::test]
 async fn test_processor() {
@@ -294,16 +294,16 @@ async fn test_processor() {
     assert_eq!(user_data.total_staked, expected_user_total_staked);
     assert_eq!(contract_data.total_staked, expected_total_staked);
     // ---------- Locked Un-staking Tests -------------
-    // perform_unstake(
-    //     program_id.clone(),
-    //     &new_payer,
-    //     payer_token_account_keypair.pubkey(),
-    //     token_acct_keypair.pubkey(),
-    //     new_payer_data_acct_pk.clone(),
-    //     data_acct_pda.clone(),
-    //     &mut banks_client,
-    //     recent_block_hash
-    // ).await;
+    perform_unstake(
+        program_id.clone(),
+        &new_payer,
+        payer_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        new_payer_data_acct_pk.clone(),
+        data_acct_pda.clone(),
+        &mut banks_client,
+        recent_block_hash
+    ).await;
     // let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
     // let user_token_data = get_token_account_data(&payer_token_account_keypair.pubkey(), &mut banks_client).await;
     // let contract_token_data = get_token_account_data(&token_acct_keypair.pubkey(), &mut banks_client).await;
