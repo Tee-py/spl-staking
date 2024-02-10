@@ -2,3 +2,6 @@
 .idea
 build
 test-ledger
+scripts/node_modules
+scripts/.idea
+scripts/keys
