@@ -3,13 +3,11 @@ import {
     Keypair, PublicKey, Signer,
     SystemProgram,
     SYSVAR_RENT_PUBKEY,
-    Transaction,
     TransactionInstruction, TransactionMessage, VersionedTransaction
 } from "@solana/web3.js";
 import BN from "bn.js";
 import {
     AccountLayout,
-    //ASSOCIATED_TOKEN_PROGRAM_ID,
     getOrCreateAssociatedTokenAccount,
     createInitializeAccountInstruction,
     createMint,
@@ -17,42 +15,12 @@ import {
     TOKEN_PROGRAM_ID
 } from "@solana/spl-token";
 import fs from "fs";
-// import { struct, u8 } from '@solana/buffer-layout';
-// import { publicKey, u64 } from '@solana/buffer-layout-utils';
 
 const PROGRAM_ID = "7iPzfTTkxYbEZy8JQLfsafApbzw5m9JYE7Amt7zeEDST";
 const TOKEN_DECIMALS = 6;
 const LOCALNET_CONNECTION_URL = "http://127.0.0.1:8899";
 const DEVNET_CONNECTION_URL = "https://few-yolo-sky.solana-devnet.quiknode.pro/3852afeceff67333bb3ccaa4172b8f9e5df67e23/";
 const MAINNET_CONNECTION_URL = "https://solana-mainnet.g.alchemy.com/v2/a0Xic8r2YTu7uJ-O-Gn27SgmDTKaelhL";
-
-// interface ContractData {
-//     isInitialized: number,
-//     adminPubkey: PublicKey,
-//     stakeTokenMint: PublicKey,
-//     stakeTokenAccount: PublicKey,
-//     minimumStakeAmount: bigint,
-//     minimumLockDuration: bigint,
-//     normalStakingApy: bigint,
-//     lockedStakingApy: bigint,
-//     earlyWithdrawalFee: bigint,
-//     totalStaked: bigint,
-//     totalEarned: bigint
-// }
-//
-// const CONTRACT_DATA_LAYOUT = struct<ContractData>([
-//     u8('isInitialized'),
-//     publicKey('adminPubkey'),
-//     publicKey('stakeTokenMint'),
-//     publicKey('stakeTokenAccount'),
-//     u64('minimumStakeAmount'),
-//     u64('minimumLockDuration'),
-//     u64('normalStakingApy'),
-//     u64('lockedStakingApy'),
-//     u64('earlyWithdrawalFee'),
-//     u64('totalStaked'),
-//     u64('totalEarned')
-// ])
 
 
 const getPublicKey = (name: string, network: string = "localnet") =>
