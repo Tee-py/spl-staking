@@ -15,6 +15,7 @@ import {
     TOKEN_PROGRAM_ID
 } from "@solana/spl-token";
 import fs from "fs";
+import { decode } from 'bs58';
 
 const PROGRAM_ID = "7iPzfTTkxYbEZy8JQLfsafApbzw5m9JYE7Amt7zeEDST";
 const TOKEN_DECIMALS = 6;
@@ -33,11 +34,22 @@ const getPrivateKey = (name: string, network: string = "localnet") =>
         JSON.parse(fs.readFileSync(`./keys/${network}/${name}.json`) as unknown as string)
     );
 
-const getKeypair = (name: string, network: string = "localnet") =>
-    new Keypair({
+export const getKeypair = (name: string, network: string = "localnet", isSecret?: boolean) => {
+    if (isSecret) {
+        const decoded = decode(JSON.parse(fs.readFileSync(`./keys/${network}/${name}.json`) as unknown as string));
+        return Keypair.fromSecretKey(decoded);
+    }
+    return new Keypair({
         publicKey: getPublicKey(name, network).toBytes(),
         secretKey: getPrivateKey(name, network),
     });
+}
+
+// const getKeypair = (name: string, network: string = "localnet") =>
+//     new Keypair({
+//         publicKey: getPublicKey(name, network).toBytes(),
+//         secretKey: getPrivateKey(name, network),
+//     });
 
 const writePublicKey = (publicKey: PublicKey, name: string, network: string = "localnet") => {
     const path = `./keys/${network}/${name}_pub.json`
@@ -129,11 +141,13 @@ const setup = async (
     let tokenAccountKeypair = new Keypair();
     let adminKeyPair: Keypair;
     try {
-        adminKeyPair = getKeypair("admin", network);
-    } catch {
-        adminKeyPair = new Keypair();
-        writePublicKey(adminKeyPair.publicKey, "admin", network);
-        writeSecretKey(adminKeyPair.secretKey, "admin", network);
+        adminKeyPair = getKeypair("admin", network, true);
+    } catch (e) {
+        console.log("Error getting admin keypair: ", e);
+        return
+        // adminKeyPair = new Keypair();
+        // writePublicKey(adminKeyPair.publicKey, "admin", network);
+        // writeSecretKey(adminKeyPair.secretKey, "admin", network);
     }
     if (network == "devnet" || network == "localnet") {
         await setupMint(
@@ -227,5 +241,5 @@ setup(
     500,
     700,
     1,
-    false
+    true
 ).then((val) => console.log(val))
