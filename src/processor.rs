@@ -61,6 +61,14 @@ impl Processor {
                     program_id,
                     accounts
                 )
+            },
+            ContractInstruction::ChangeTaxPercent { tax_percent } => {
+                msg!("Staking [Info]: Change Tax Percent");
+                Self::change_tax_percent(
+                    program_id,
+                    accounts,
+                    tax_percent
+                )
             }
         }
     }
@@ -359,6 +367,40 @@ impl Processor {
                 )
             }
         }
+    }
+
+    fn change_tax_percent(
+        _program_id: &Pubkey,
+        accounts: &[AccountInfo],
+        tax_percent: u64
+    ) -> ProgramResult {
+        // Get all accounts sent to the instruction
+        let accounts_info_iter = &mut accounts.iter();
+        let admin = next_account_info(accounts_info_iter)?;
+        let data_account = next_account_info(accounts_info_iter)?;
+
+        // perform necessary checks
+        if !admin.is_signer {
+            return Err(ProgramError::MissingRequiredSignature.into());
+        }
+
+        if !data_account.is_writable {
+            return Err(ProgramError::InvalidAccountData.into());
+        }
+
+        if tax_percent < 1 {
+            msg!("Staking [Error]: Invalid tax percentage");
+            return Err(ProgramError::InvalidInstructionData.into())
+        }
+
+        let mut contract_data = ContractData::unpack_from_slice(&data_account.data.borrow())?;
+        if &contract_data.admin_pubkey != admin.key {
+            msg!("Staking [Error]: Invalid contract data");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        contract_data.mint_tax_percent = tax_percent;
+        ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
+        Ok(())
     }
 
     fn perform_unstake<'a>(

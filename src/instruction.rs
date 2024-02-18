@@ -55,7 +55,17 @@ pub enum Instruction {
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
     /// 5. `[writable]` The data account for the contract
-    UnStake
+    UnStake,
+
+    /// Change percentage tax for token 2022 mint
+    ///
+    /// Accounts Expected
+    ///
+    /// 1. `[Signer]` The admin of the contract data account
+    /// 2. `[writable]` The contract data account
+    ChangeTaxPercent {
+        tax_percent: u64
+    }
 }
 
 impl Instruction {
@@ -102,6 +112,11 @@ impl Instruction {
                 },
                 2 => {
                     Self::UnStake
+                },
+                3 => {
+                    Self::ChangeTaxPercent {
+                        tax_percent: Self::unpack_u64(rest)?
+                    }
                 }
                 _ => {
                     return Err(ProgramError::InvalidInstructionData.into())
