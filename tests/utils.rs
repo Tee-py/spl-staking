@@ -13,6 +13,7 @@ use solana_program::sysvar::rent;
 use spl_token::state::{Account as TokenAccount, Mint};
 use spl_staking::state::{ContractData, UserData};
 
+
 pub async fn get_user_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> UserData {
     let user_account = banks_client
         .get_account(pubkey.clone())
@@ -81,7 +82,7 @@ pub async fn set_up_mint(
                 &mint.pubkey(),
                 rent.minimum_balance(Mint::LEN),
                 Mint::LEN as u64,
-                &spl_token::id()
+                &spl_token::ID
             ),
             spl_token::instruction::initialize_mint(
                 &spl_token::id(),
@@ -258,7 +259,7 @@ pub async fn perform_stake(
                     AccountMeta::new(user_data_acct_pk, false),
                     AccountMeta::new(contract_tkn_acct_pk, false),
                     AccountMeta::new(contract_data_acct_pk, false),
-                    AccountMeta::new_readonly(spl_token::ID, false),
+                    AccountMeta::new_readonly(spl_token_2022::ID, false),
                     AccountMeta::new_readonly(system_program::ID, false)
                 ]
             )
@@ -291,7 +292,7 @@ pub async fn perform_unstake(
                     AccountMeta::new(user_data_acct_pk, false),
                     AccountMeta::new(contract_tkn_acct_pk, false),
                     AccountMeta::new(contract_data_acct_pk, false),
-                    AccountMeta::new_readonly(spl_token::ID, false)
+                    AccountMeta::new_readonly(spl_token_2022::ID, false)
                 ]
             )
         ],

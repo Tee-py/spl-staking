@@ -26,6 +26,8 @@ pub enum Instruction {
         locked_staking_apy: u64,
         /// Penalty for early withdrawal in locked staking (decimals = 1)
         early_withdrawal_fee: u64,
+        /// percentage tax for TOKEN_2022 (decimals = 1)
+        tax_percent: u64
     },
 
     /// Stake tokens
@@ -68,14 +70,16 @@ impl Instruction {
                         min_lk_dst,
                         ns_apy_dst,
                         ls_apy_dst,
-                        e_wdf_dst
-                    ) = array_refs![rest, 8, 8, 8, 8, 8];
+                        e_wdf_dst,
+                        tax_per
+                    ) = array_refs![rest, 8, 8, 8, 8, 8, 8];
                     Self::Init {
                         minimum_stake_amount: Self::unpack_u64(min_stk_dst)?,
                         minimum_lock_duration: Self::unpack_u64(min_lk_dst)?,
                         normal_staking_apy: Self::unpack_u64(ns_apy_dst)?,
                         locked_staking_apy: Self::unpack_u64(ls_apy_dst)?,
-                        early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?
+                        early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?,
+                        tax_percent: Self::unpack_u64(tax_per)?,
                     }
                 },
                 1 => {

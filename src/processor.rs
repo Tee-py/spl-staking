@@ -32,14 +32,14 @@ impl Processor {
             ContractInstruction::Init {
                 minimum_stake_amount, minimum_lock_duration,
                 normal_staking_apy, locked_staking_apy,
-                early_withdrawal_fee
+                early_withdrawal_fee, tax_percent
             } => {
                 msg!("Staking [Info]: Init contract instruction");
                 Self::init(
                     program_id, accounts,
                     minimum_stake_amount, minimum_lock_duration,
                     normal_staking_apy, locked_staking_apy,
-                    early_withdrawal_fee
+                    early_withdrawal_fee, tax_percent
                 )
             },
             ContractInstruction::Stake {
@@ -72,7 +72,8 @@ impl Processor {
         minimum_lock_duration: u64,
         normal_staking_apy: u64,
         locked_staking_apy: u64,
-        early_withdrawal_fee: u64
+        early_withdrawal_fee: u64,
+        token_tax_percent: u64
     ) -> ProgramResult {
         // Get all accounts sent to the instruction
         let accounts_info_iter = &mut accounts.iter();
@@ -93,6 +94,10 @@ impl Processor {
         if minimum_stake_amount == 0 {
             msg!("Staking [Error]: Cannot init contract with zero minimum stake amount");
             return Err(ProgramError::InvalidInstructionData.into());
+        }
+        if token_program_info.key == spl_token_2022::ID && token_tax_percent < 1 {
+            msg!("Staking [Error]: Instruction specified TOKEN_2022 but invalid tax percentage");
+            return Err(ProgramError::InvalidInstructionData.into())
         }
 
         // Create Contract Data account with the PDA
