@@ -26,8 +26,10 @@ pub enum Instruction {
         locked_staking_apy: u64,
         /// Penalty for early withdrawal in locked staking (decimals = 1)
         early_withdrawal_fee: u64,
-        /// percentage tax for TOKEN_2022 (decimals = 1)
-        tax_percent: u64
+        /// percentage tax for TOKEN_2022 (decimals = 100)
+        fee_basis_points: u64,
+        /// max fee for TOKEN_2022 (decimals = mint decimals)
+        max_fee: u64
     },
 
     /// Stake tokens
@@ -55,7 +57,9 @@ pub enum Instruction {
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
     /// 5. `[writable]` The data account for the contract
-    UnStake,
+    UnStake {
+        decimals: u64
+    },
 
     /// Change percentage tax for token 2022 mint
     ///
@@ -63,8 +67,9 @@ pub enum Instruction {
     ///
     /// 1. `[Signer]` The admin of the contract data account
     /// 2. `[writable]` The contract data account
-    ChangeTaxPercent {
-        tax_percent: u64
+    ChangeTransferFeeConfig {
+        fee_basis_points: u64,
+        max_fee: u64
     }
 }
 
@@ -81,15 +86,17 @@ impl Instruction {
                         ns_apy_dst,
                         ls_apy_dst,
                         e_wdf_dst,
-                        tax_per
-                    ) = array_refs![rest, 8, 8, 8, 8, 8, 8];
+                        fee_b_pt_dst,
+                        max_fee_dst
+                    ) = array_refs![rest, 8, 8, 8, 8, 8, 8, 8];
                     Self::Init {
                         minimum_stake_amount: Self::unpack_u64(min_stk_dst)?,
                         minimum_lock_duration: Self::unpack_u64(min_lk_dst)?,
                         normal_staking_apy: Self::unpack_u64(ns_apy_dst)?,
                         locked_staking_apy: Self::unpack_u64(ls_apy_dst)?,
                         early_withdrawal_fee: Self::unpack_u64(e_wdf_dst)?,
-                        tax_percent: Self::unpack_u64(tax_per)?,
+                        fee_basis_points: Self::unpack_u64(fee_b_pt_dst)?,
+                        max_fee: Self::unpack_u64(max_fee_dst)?
                     }
                 },
                 1 => {
@@ -111,11 +118,19 @@ impl Instruction {
                     }
                 },
                 2 => {
-                    Self::UnStake
+                    Self::UnStake {
+                        decimals: Self::unpack_u64(rest)?
+                    }
                 },
                 3 => {
-                    Self::ChangeTaxPercent {
-                        tax_percent: Self::unpack_u64(rest)?
+                    let rest = array_ref![rest, 0, 16];
+                    let (
+                        fee_b_pt_dst,
+                        max_fee_dst
+                    ) = array_refs![rest, 8, 8];
+                    Self::ChangeTransferFeeConfig {
+                        fee_basis_points: Self::unpack_u64(fee_b_pt_dst)?,
+                        max_fee: Self::unpack_u64(max_fee_dst)?
                     }
                 }
                 _ => {

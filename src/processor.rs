@@ -15,6 +15,7 @@ use solana_program::clock::Clock;
 //use solana_program::instruction::AccountMeta;
 use solana_program::rent::Rent;
 use spl_token::state::{Account as TokenAccount};
+use spl_token_2022::extension::transfer_fee::instruction::transfer_checked_with_fee;
 use crate::instruction::Instruction as ContractInstruction;
 use crate::state::{ContractData, StakeType, UserData};
 
@@ -32,14 +33,15 @@ impl Processor {
             ContractInstruction::Init {
                 minimum_stake_amount, minimum_lock_duration,
                 normal_staking_apy, locked_staking_apy,
-                early_withdrawal_fee, tax_percent
+                early_withdrawal_fee, fee_basis_points,
+                max_fee
             } => {
                 msg!("Staking [Info]: Init contract instruction");
                 Self::init(
                     program_id, accounts,
                     minimum_stake_amount, minimum_lock_duration,
                     normal_staking_apy, locked_staking_apy,
-                    early_withdrawal_fee, tax_percent
+                    early_withdrawal_fee, fee_basis_points, max_fee
                 )
             },
             ContractInstruction::Stake {
@@ -55,19 +57,24 @@ impl Processor {
                     lock_duration
                 )
             },
-            ContractInstruction::UnStake => {
+            ContractInstruction::UnStake { decimals} => {
                 msg!("Staking [Info]: Unstake Instruction");
                 Self::unstake(
                     program_id,
-                    accounts
+                    accounts,
+                    decimals
                 )
             },
-            ContractInstruction::ChangeTaxPercent { tax_percent } => {
+            ContractInstruction::ChangeTransferFeeConfig {
+                fee_basis_points,
+                max_fee
+            } => {
                 msg!("Staking [Info]: Change Tax Percent");
-                Self::change_tax_percent(
+                Self::change_transfer_fee_config(
                     program_id,
                     accounts,
-                    tax_percent
+                    fee_basis_points,
+                    max_fee
                 )
             }
         }
@@ -81,7 +88,8 @@ impl Processor {
         normal_staking_apy: u64,
         locked_staking_apy: u64,
         early_withdrawal_fee: u64,
-        token_tax_percent: u64
+        fee_basis_points: u64,
+        max_fee: u64
     ) -> ProgramResult {
         // Get all accounts sent to the instruction
         let accounts_info_iter = &mut accounts.iter();
@@ -103,8 +111,8 @@ impl Processor {
             msg!("Staking [Error]: Cannot init contract with zero minimum stake amount");
             return Err(ProgramError::InvalidInstructionData.into());
         }
-        if token_program_info.key == spl_token_2022::ID && token_tax_percent < 1 {
-            msg!("Staking [Error]: Instruction specified TOKEN_2022 but invalid tax percentage");
+        if token_program_info.key == spl_token_2022::ID && (fee_basis_points < 1 || max_fee < 1) {
+            msg!("Staking [Error]: Instruction specified TOKEN_2022 but invalid transfer config");
             return Err(ProgramError::InvalidInstructionData.into())
         }
 
@@ -176,7 +184,8 @@ impl Processor {
         contract_data.early_withdrawal_fee = early_withdrawal_fee;
         contract_data.total_earned = 0;
         contract_data.total_staked = 0;
-        contract_data.mint_tax_percent = token_tax_percent;
+        contract_data.fee_basis_points = fee_basis_points;
+        contract_data.max_fee = max_fee;
 
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
         Ok(())
@@ -286,6 +295,7 @@ impl Processor {
     fn unstake(
         program_id: &Pubkey,
         accounts: &[AccountInfo],
+        decimals: u64
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let user_info = next_account_info(account_info_iter)?;
@@ -350,6 +360,7 @@ impl Processor {
                     contract_data_account_info,
                     StakeType::NORMAL,
                     contract_data.normal_staking_apy,
+                    decimals
                 )
             },
             StakeType::LOCKED => {
@@ -363,16 +374,18 @@ impl Processor {
                     contract_token_account_info,
                     contract_data_account_info,
                     StakeType::LOCKED,
-                    contract_data.locked_staking_apy
+                    contract_data.locked_staking_apy,
+                    decimals
                 )
             }
         }
     }
 
-    fn change_tax_percent(
+    fn change_transfer_fee_config(
         _program_id: &Pubkey,
         accounts: &[AccountInfo],
-        tax_percent: u64
+        fee_basis_points: u64,
+        max_fee: u64
     ) -> ProgramResult {
         // Get all accounts sent to the instruction
         let accounts_info_iter = &mut accounts.iter();
@@ -388,8 +401,8 @@ impl Processor {
             return Err(ProgramError::InvalidAccountData.into());
         }
 
-        if tax_percent < 1 {
-            msg!("Staking [Error]: Invalid tax percentage");
+        if fee_basis_points < 1 || max_fee < 1 {
+            msg!("Staking [Error]: Invalid transfer config");
             return Err(ProgramError::InvalidInstructionData.into())
         }
 
@@ -398,7 +411,8 @@ impl Processor {
             msg!("Staking [Error]: Invalid contract data");
             return Err(ProgramError::InvalidAccountData.into())
         }
-        contract_data.mint_tax_percent = tax_percent;
+        contract_data.fee_basis_points = fee_basis_points;
+        contract_data.max_fee = max_fee;
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
         Ok(())
     }
@@ -413,6 +427,7 @@ impl Processor {
         contract_data_account: &AccountInfo<'a>,
         stake_type: StakeType,
         apy: u64,
+        decimals: u64
     ) -> ProgramResult {
         // verify the user data account
         let seeds: &[&[u8]] = &[b"spl_staking_user", user_info.key.as_ref()];
@@ -469,14 +484,23 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
-        let amount_out_with_tax = (amount_out * 1000)/(1000 - contract_data.mint_tax_percent);
-        let token_transfer_ix = spl_token_2022::instruction::transfer(
+        let fee = (amount_out * contract_data.fee_basis_points)/10000;
+        let actual_fee = if fee > contract_data.max_fee {
+            contract_data.max_fee
+        } else {
+            fee
+        };
+        let amount_out_with_tax = amount_out + actual_fee;
+        let token_transfer_ix = transfer_checked_with_fee(
             token_program_info.key,
             contract_token_account_info.key,
+            &contract_data.stake_token_mint,
             user_token_account_info.key,
             &authority_pda,
             &[&authority_pda],
-            amount_out_with_tax
+            amount_out_with_tax,
+            decimals as u8,
+            actual_fee
         )?;
         let signer_seeds: &[&[u8]] = &[
             b"spl_staking",
