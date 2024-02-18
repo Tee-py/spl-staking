@@ -470,7 +470,7 @@ impl Processor {
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
         let amount_out_with_tax = (amount_out * 1000)/(1000 - contract_data.mint_tax_percent);
-        let token_transfer_ix = spl_token::instruction::transfer(
+        let token_transfer_ix = spl_token_2022::instruction::transfer(
             token_program_info.key,
             contract_token_account_info.key,
             user_token_account_info.key,
