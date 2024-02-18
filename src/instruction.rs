@@ -40,11 +40,14 @@ pub enum Instruction {
     /// 2. `[writable]` The token account of the user
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
-    /// 6. `[writable]` The data account for the contract
-    /// 7. `[]` System program info
+    /// 5. `[writable]` The data account for the contract
+    /// 6. `[]` Mint info
+    /// 7. `[]` TOKEN 2022 PROGRAM ID
+    /// 8. `[]` System program info
     Stake {
         stake_type: StakeType,
         amount: u64,
+        decimals: u64,
         lock_duration: u64
     },
 
@@ -57,6 +60,8 @@ pub enum Instruction {
     /// 3. `[writable]` The user data account for the contract
     /// 4. `[writable]` The token account for the contract
     /// 5. `[writable]` The data account for the contract
+    /// 6. `[]` Token mint
+    /// 7. `[]` TOKEN 2022 PROGRAM ID
     UnStake {
         decimals: u64
     },
@@ -79,7 +84,7 @@ impl Instruction {
         Ok(
             match tag {
                 0 => {
-                    let rest = array_ref![rest, 0, 40];
+                    let rest = array_ref![rest, 0, 56];
                     let (
                         min_stk_dst,
                         min_lk_dst,
@@ -100,12 +105,13 @@ impl Instruction {
                     }
                 },
                 1 => {
-                    let rest = array_ref![rest, 0, 17];
+                    let rest = array_ref![rest, 0, 25];
                     let (
                         stake_type_dst,
                         amount_dst,
+                        dec_dst,
                         lock_duration_dst
-                    ) = array_refs![rest, 1, 8, 8];
+                    ) = array_refs![rest, 1, 8, 8, 8];
                     let stake_type = match stake_type_dst[0] {
                         0 => StakeType::NORMAL,
                         1 => StakeType::LOCKED,
@@ -114,6 +120,7 @@ impl Instruction {
                     Self::Stake {
                         stake_type,
                         amount: Self::unpack_u64(amount_dst)?,
+                        decimals: Self::unpack_u64(dec_dst)?,
                         lock_duration: Self::unpack_u64(lock_duration_dst)?
                     }
                 },

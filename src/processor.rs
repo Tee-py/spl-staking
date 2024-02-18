@@ -8,14 +8,12 @@ use solana_program::{
     system_instruction,
     sysvar::{Sysvar},
     program::{invoke_signed, invoke},
-    //clock::Clock,
     msg,
 };
 use solana_program::clock::Clock;
-//use solana_program::instruction::AccountMeta;
 use solana_program::rent::Rent;
-use spl_token::state::{Account as TokenAccount};
-use spl_token_2022::extension::transfer_fee::instruction::transfer_checked_with_fee;
+use spl_token_2022::state::{Account as TokenAccount};
+use spl_token_2022::extension::{transfer_fee::instruction::transfer_checked_with_fee};
 use crate::instruction::Instruction as ContractInstruction;
 use crate::state::{ContractData, StakeType, UserData};
 
@@ -46,7 +44,7 @@ impl Processor {
             },
             ContractInstruction::Stake {
                 stake_type, amount,
-                lock_duration
+                lock_duration, decimals
             } => {
                 msg!("Staking [Info]: Stake Instruction");
                 Self::stake(
@@ -54,7 +52,8 @@ impl Processor {
                     accounts,
                     stake_type,
                     amount,
-                    lock_duration
+                    lock_duration,
+                    decimals
                 )
             },
             ContractInstruction::UnStake { decimals} => {
@@ -111,9 +110,17 @@ impl Processor {
             msg!("Staking [Error]: Cannot init contract with zero minimum stake amount");
             return Err(ProgramError::InvalidInstructionData.into());
         }
-        if token_program_info.key == spl_token_2022::ID && (fee_basis_points < 1 || max_fee < 1) {
-            msg!("Staking [Error]: Instruction specified TOKEN_2022 but invalid transfer config");
+        if token_program_info.key != &spl_token_2022::ID {
+            msg!("Staking [Error]: Invalid Token Program. Contract supports TOKEN 2022 only");
             return Err(ProgramError::InvalidInstructionData.into())
+        }
+        if token_account.owner != &spl_token_2022::ID {
+            msg!("Staking [Error]: Invalid Token Account. Supports only Token 2022 Accounts");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        if mint_info.owner != &spl_token_2022::ID {
+            msg!("Staking [Error]: Invalid Mint Account. Supports only Token 2022 Mint Accounts");
+            return Err(ProgramError::InvalidAccountData.into())
         }
 
         // Create Contract Data account with the PDA
@@ -151,11 +158,11 @@ impl Processor {
         )?;
 
         // Change ownership of the token account
-        let change_owner_ix = spl_token::instruction::set_authority(
-            &spl_token::id(),
+        let change_owner_ix = spl_token_2022::instruction::set_authority(
+            &spl_token_2022::id(),
             token_account.key,
             Some(&pda_addr),
-            spl_token::instruction::AuthorityType::AccountOwner,
+            spl_token_2022::instruction::AuthorityType::AccountOwner,
             admin.key,
             &[&admin.key]
         )?;
@@ -196,7 +203,8 @@ impl Processor {
         accounts: &[AccountInfo],
         stake_type: StakeType,
         amount: u64,
-        lock_duration: u64
+        lock_duration: u64,
+        decimals: u64
     ) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let user_info = next_account_info(account_info_iter)?;
@@ -204,6 +212,7 @@ impl Processor {
         let user_data_account_info = next_account_info(account_info_iter)?;
         let contract_token_account_info = next_account_info(account_info_iter)?;
         let contract_data_account_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
         let system_program_info = next_account_info(account_info_iter)?;
 
@@ -262,8 +271,10 @@ impl Processor {
                     token_program_info,
                     contract_token_account_info,
                     contract_data_account_info,
+                    mint_info,
                     StakeType::NORMAL,
                     amount,
+                    decimals,
                     contract_data.normal_staking_apy,
                     0
                 )
@@ -283,8 +294,10 @@ impl Processor {
                     token_program_info,
                     contract_token_account_info,
                     contract_data_account_info,
+                    mint_info,
                     StakeType::LOCKED,
                     amount,
+                    decimals,
                     contract_data.locked_staking_apy,
                     lock_duration
                 )
@@ -303,6 +316,7 @@ impl Processor {
         let user_data_account_info = next_account_info(account_info_iter)?;
         let contract_token_account_info = next_account_info(account_info_iter)?;
         let contract_data_account_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?;
 
         let contract_data = ContractData::unpack_from_slice(&contract_data_account_info.data.borrow())?;
@@ -358,6 +372,7 @@ impl Processor {
                     token_program_info,
                     contract_token_account_info,
                     contract_data_account_info,
+                    mint_info,
                     StakeType::NORMAL,
                     contract_data.normal_staking_apy,
                     decimals
@@ -373,6 +388,7 @@ impl Processor {
                     token_program_info,
                     contract_token_account_info,
                     contract_data_account_info,
+                    mint_info,
                     StakeType::LOCKED,
                     contract_data.locked_staking_apy,
                     decimals
@@ -425,6 +441,7 @@ impl Processor {
         token_program_info: &AccountInfo<'a>,
         contract_token_account_info: &AccountInfo<'a>,
         contract_data_account: &AccountInfo<'a>,
+        mint_info: &AccountInfo<'a>,
         stake_type: StakeType,
         apy: u64,
         decimals: u64
@@ -484,13 +501,16 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
-        let fee = (amount_out * contract_data.fee_basis_points)/10000;
-        let actual_fee = if fee > contract_data.max_fee {
-            contract_data.max_fee
-        } else {
-            fee
+        let mut fee = (amount_out * contract_data.fee_basis_points)/10000;
+        if fee > contract_data.max_fee {
+            fee = contract_data.max_fee
         };
-        let amount_out_with_tax = amount_out + actual_fee;
+        let amount_out_with_fee = amount_out + fee;
+        let mut new_fee = (amount_out_with_fee * contract_data.fee_basis_points)/10000;
+        if new_fee > contract_data.max_fee {
+            new_fee = contract_data.max_fee
+        };
+        msg!("Amount Out: {} Amount Out With Fee: {} Fee: {}", amount_out, amount_out_with_fee, new_fee);
         let token_transfer_ix = transfer_checked_with_fee(
             token_program_info.key,
             contract_token_account_info.key,
@@ -498,9 +518,9 @@ impl Processor {
             user_token_account_info.key,
             &authority_pda,
             &[&authority_pda],
-            amount_out_with_tax,
+            amount_out_with_fee,
             decimals as u8,
-            actual_fee
+            new_fee
         )?;
         let signer_seeds: &[&[u8]] = &[
             b"spl_staking",
@@ -513,6 +533,7 @@ impl Processor {
             &token_transfer_ix,
             &[
                 contract_token_account_info.clone(),
+                mint_info.clone(),
                 user_token_account_info.clone(),
                 contract_data_account.clone(),
                 token_program_info.clone(),
@@ -539,8 +560,10 @@ impl Processor {
         token_program_info: &AccountInfo<'a>,
         contract_token_account_info: &AccountInfo<'a>,
         contract_data_account: &AccountInfo<'a>,
+        mint_account: &AccountInfo<'a>,
         stake_type: StakeType,
         amount: u64,
+        decimals: u64,
         apy: u64,
         lock_duration: u64
     ) -> ProgramResult {
@@ -584,7 +607,7 @@ impl Processor {
             let mut data = UserData::unpack_unchecked(
                 &user_data_account.data.borrow()
             )?;
-            data.stake_type = stake_type;
+            data.stake_type = stake_type.clone();
             data.owner_pubkey = *user_info.key;
             data.is_initialized = false;
             data.total_staked = 0;
@@ -603,46 +626,76 @@ impl Processor {
         if !user_data.is_initialized {
             msg!("Staking [Info]: First time staking");
             // Transfer tokens to contract pda for locking
-            let transfer_tkn_ix = spl_token::instruction::transfer(
-                &spl_token::ID,
+            let fee = (amount * contract_data.fee_basis_points)/10000;
+            let actual_fee = if fee > contract_data.max_fee {
+                contract_data.max_fee
+            } else {
+                fee
+            };
+            let transfer_tkn_ix = transfer_checked_with_fee(
+                &spl_token_2022::ID,
                 user_token_account_info.key,
+                &contract_data.stake_token_mint,
                 contract_token_account_info.key,
                 user_info.key,
                 &[user_info.key],
-                amount
+                amount,
+                decimals as u8,
+                actual_fee
             )?;
             invoke(
                 &transfer_tkn_ix,
                 &[
                     user_token_account_info.clone(),
+                    mint_account.clone(),
                     contract_token_account_info.clone(),
                     user_info.clone(),
                     token_program_info.clone()
                 ]
             )?;
             user_data.is_initialized = true;
-            if stake_type == StakeType::NORMAL {
-                let total_staked = (amount * 1000)/(1000-contract_data.mint_tax_percent);
-                user_data.total_staked = total_staked;
-            } else {
-                user_data.total_staked = amount;
+            match stake_type {
+                StakeType::NORMAL => {
+                    let total_staked = (amount * 10000)/(10000-contract_data.fee_basis_points);
+                    let fee = total_staked - amount;
+                    if fee < contract_data.max_fee {
+                        user_data.total_staked = total_staked;
+                        contract_data.total_staked = contract_data.total_staked.add(total_staked);
+                    } else {
+                        user_data.total_staked = amount + contract_data.max_fee;
+                        contract_data.total_staked = contract_data.total_staked.add(amount).add(contract_data.max_fee);
+                    }
+                },
+                StakeType::LOCKED => {
+                    user_data.total_staked = amount;
+                    contract_data.total_staked = contract_data.total_staked.add(amount);
+                }
             }
-            contract_data.total_staked = contract_data.total_staked.add(amount);
         } else {
             msg!("Staking [Info]: Re-staking");
             // Transfer tokens to contract pda
-            let transfer_tkn_ix = spl_token::instruction::transfer(
-                &spl_token::ID,
+            let fee = (amount * contract_data.fee_basis_points)/10000;
+            let actual_fee = if fee > contract_data.max_fee {
+                contract_data.max_fee
+            } else {
+                fee
+            };
+            let transfer_tkn_ix = transfer_checked_with_fee(
+                &spl_token_2022::ID,
                 user_token_account_info.key,
+                &contract_data.stake_token_mint,
                 contract_token_account_info.key,
                 user_info.key,
                 &[user_info.key],
-                amount
+                amount,
+                decimals as u8,
+                actual_fee
             )?;
             invoke(
                 &transfer_tkn_ix,
                 &[
                     user_token_account_info.clone(),
+                    mint_account.clone(),
                     contract_token_account_info.clone(),
                     user_info.clone(),
                     token_program_info.clone()
