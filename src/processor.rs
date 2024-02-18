@@ -168,6 +168,7 @@ impl Processor {
         contract_data.early_withdrawal_fee = early_withdrawal_fee;
         contract_data.total_earned = 0;
         contract_data.total_staked = 0;
+        contract_data.mint_tax_percent = token_tax_percent;
 
         ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
         Ok(())
@@ -426,13 +427,14 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
+        let amount_out_with_tax = (amount_out * 1000)/(1000 - contract_data.mint_tax_percent);
         let token_transfer_ix = spl_token::instruction::transfer(
             token_program_info.key,
             contract_token_account_info.key,
             user_token_account_info.key,
             &authority_pda,
             &[&authority_pda],
-            amount_out
+            amount_out_with_tax
         )?;
         let signer_seeds: &[&[u8]] = &[
             b"spl_staking",
@@ -553,7 +555,12 @@ impl Processor {
                 ]
             )?;
             user_data.is_initialized = true;
-            user_data.total_staked = amount;
+            if stake_type == StakeType::NORMAL {
+                let total_staked = (amount * 1000)/(1000-contract_data.mint_tax_percent);
+                user_data.total_staked = total_staked;
+            } else {
+                user_data.total_staked = amount;
+            }
             contract_data.total_staked = contract_data.total_staked.add(amount);
         } else {
             msg!("Staking [Info]: Re-staking");
