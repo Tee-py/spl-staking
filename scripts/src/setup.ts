@@ -1,8 +1,8 @@
 import {
     Connection,
-    Keypair, PublicKey, Signer,
+    Keypair, PublicKey, sendAndConfirmTransaction, Signer,
     SystemProgram,
-    SYSVAR_RENT_PUBKEY,
+    SYSVAR_RENT_PUBKEY, Transaction,
     TransactionInstruction, TransactionMessage, VersionedTransaction
 } from "@solana/web3.js";
 import BN from "bn.js";
@@ -12,13 +12,20 @@ import {
     createInitializeAccountInstruction,
     createMint,
     mintTo,
-    TOKEN_PROGRAM_ID
+    TOKEN_PROGRAM_ID,
+    TOKEN_2022_PROGRAM_ID,
+    ExtensionType,
+    getMintLen,
+    createInitializeTransferFeeConfigInstruction,
+    createInitializeMintInstruction
 } from "@solana/spl-token";
 import fs from "fs";
 import { decode } from 'bs58';
 
-const PROGRAM_ID = "7iPzfTTkxYbEZy8JQLfsafApbzw5m9JYE7Amt7zeEDST";
+const PROGRAM_ID = "9Ef7uzrdsFCjb3jCqR9YERTKAKnmpxj8QMRGKED1Csq5";
 const TOKEN_DECIMALS = 6;
+const FEE_BASIS_POINTS = 100;
+const MAX_FEE = 10 * Math.pow(10, TOKEN_DECIMALS);
 const LOCALNET_CONNECTION_URL = "http://127.0.0.1:8899";
 const DEVNET_CONNECTION_URL = "https://few-yolo-sky.solana-devnet.quiknode.pro/3852afeceff67333bb3ccaa4172b8f9e5df67e23/";
 const MAINNET_CONNECTION_URL = "https://solana-mainnet.g.alchemy.com/v2/a0Xic8r2YTu7uJ-O-Gn27SgmDTKaelhL";
@@ -83,28 +90,45 @@ const setupMint = async (
         mintKeyPair = getKeypair("mint", network);
     } catch {
         mintKeyPair = new Keypair();
-        await createMint(
-            connection,
-            {
-                publicKey: clientKeypair.publicKey,
-                secretKey: clientKeypair.secretKey,
-            },
-            clientKeypair.publicKey,
-            null,
-            TOKEN_DECIMALS,
-            mintKeyPair
+        const extensions = [
+            ExtensionType.TransferFeeConfig
+        ];
+        const minLen = getMintLen(extensions);
+        const requiredLamports = await connection.getMinimumBalanceForRentExemption(minLen);
+        const mintTxn = new Transaction().add(
+            SystemProgram.createAccount({
+                fromPubkey: clientKeypair.publicKey,
+                newAccountPubkey: mintKeyPair.publicKey,
+                space: minLen,
+                lamports: requiredLamports,
+                programId: TOKEN_2022_PROGRAM_ID
+            }),
+            createInitializeTransferFeeConfigInstruction(
+                mintKeyPair.publicKey,
+                clientKeypair.publicKey,
+                clientKeypair.publicKey,
+                FEE_BASIS_POINTS,
+                BigInt(MAX_FEE),
+                TOKEN_2022_PROGRAM_ID
+            ),
+            createInitializeMintInstruction(mintKeyPair.publicKey, TOKEN_DECIMALS, clientKeypair.publicKey, null, TOKEN_2022_PROGRAM_ID)
         );
+        await sendAndConfirmTransaction(connection, mintTxn, [clientKeypair, mintKeyPair], undefined);
         writePublicKey(mintKeyPair.publicKey, "mint", network);
         writeSecretKey(mintKeyPair.secretKey, "mint", network);
     }
     // For Devnet [ Create Token Accounts and Mint Tokens ]
     if (mintTokens && mintToAccount) {
-        console.log('Mintinggggg')
+        console.log('Minting Tokens')
         const associatedToken = await getOrCreateAssociatedTokenAccount(
             connection,
             clientKeypair,
             mintKeyPair.publicKey,
-            new PublicKey(mintToAccount)
+            new PublicKey(mintToAccount),
+            undefined,
+            undefined,
+            undefined,
+            TOKEN_2022_PROGRAM_ID
         )
         await mintTo(
             connection,
@@ -112,7 +136,10 @@ const setupMint = async (
             mintKeyPair.publicKey,
             associatedToken.address,
             clientKeypair,
-            20000*10**TOKEN_DECIMALS
+            20000*10**TOKEN_DECIMALS,
+            undefined,
+            undefined,
+            TOKEN_2022_PROGRAM_ID
         )
         console.log('Done minting for:', associatedToken.address)
     }
@@ -141,13 +168,10 @@ const setup = async (
     let tokenAccountKeypair = new Keypair();
     let adminKeyPair: Keypair;
     try {
-        adminKeyPair = getKeypair("admin", network, true);
+        adminKeyPair = getKeypair("admin", network);
     } catch (e) {
         console.log("Error getting admin keypair: ", e);
         return
-        // adminKeyPair = new Keypair();
-        // writePublicKey(adminKeyPair.publicKey, "admin", network);
-        // writeSecretKey(adminKeyPair.secretKey, "admin", network);
     }
     if (network == "devnet" || network == "localnet") {
         await setupMint(
@@ -155,8 +179,8 @@ const setup = async (
             network,
             connection,
             adminKeyPair,
-            true,
-            "4MBmCpddAHFqC8Fkj1DZ4RM8JoYXWdXjHQ9LXxgiUped"
+            false,
+            "HQMsLCGhAoCPpLrrcdnbe7UE5tpVKXdjHDEtQ27TTxLv"
         )
     }
     if (runInit) {
@@ -165,17 +189,19 @@ const setup = async (
             [Buffer.from("spl_staking", "utf-8"), adminKeyPair.publicKey.toBuffer(), mintPubkey.toBuffer()],
             programId
         );
+        const tokenAcctLen = getMintLen([ExtensionType.TransferFeeAmount]);
         const createTokenAcctIX = SystemProgram.createAccount({
-            programId: TOKEN_PROGRAM_ID,
-            space: AccountLayout.span,
-            lamports: await connection.getMinimumBalanceForRentExemption(AccountLayout.span),
+            programId: TOKEN_2022_PROGRAM_ID,
+            space: tokenAcctLen,
+            lamports: await connection.getMinimumBalanceForRentExemption(tokenAcctLen),
             fromPubkey: adminKeyPair.publicKey,
             newAccountPubkey: tokenAccountKeypair.publicKey
         })
         const initTokenAcctIX = createInitializeAccountInstruction(
             tokenAccountKeypair.publicKey,
             mintPubkey,
-            adminKeyPair.publicKey
+            adminKeyPair.publicKey,
+            TOKEN_2022_PROGRAM_ID
         );
         const instructionData = Buffer.from(
             Uint8Array.of(
@@ -184,7 +210,9 @@ const setup = async (
                 ...new BN(minimumLockDuration).toArray("le", 8),
                 ...new BN(normalStakingApy * 10).toArray("le", 8),
                 ...new BN(lockedStakingApy * 10).toArray("le", 8),
-                ...new BN(earlyWithdrawalFee * 10).toArray("le", 8)
+                ...new BN(earlyWithdrawalFee * 10).toArray("le", 8),
+                ...new BN(FEE_BASIS_POINTS).toArray("le", 8),
+                ...new BN(MAX_FEE).toArray("le", 8),
             )
         )
         const initIX = new TransactionInstruction({
@@ -194,7 +222,7 @@ const setup = async (
                 { pubkey: dataAccountPubKey, isSigner: false, isWritable: true },
                 { pubkey: tokenAccountKeypair.publicKey, isSigner: false, isWritable: true },
                 { pubkey: mintPubkey, isSigner: false, isWritable: false },
-                { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+                { pubkey: TOKEN_2022_PROGRAM_ID, isSigner: false, isWritable: false },
                 { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
                 { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }
             ],
@@ -227,7 +255,10 @@ const setup = async (
                     mintPubkey,
                     tokenAccountKeypair.publicKey,
                     adminKeyPair,
-                    100000*10**TOKEN_DECIMALS
+                    100000*10**TOKEN_DECIMALS,
+                    undefined,
+                    undefined,
+                    TOKEN_2022_PROGRAM_ID
                 )
             }
         }
