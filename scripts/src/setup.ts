@@ -23,9 +23,9 @@ import fs from "fs";
 import { decode } from 'bs58';
 
 const PROGRAM_ID = "9Ef7uzrdsFCjb3jCqR9YERTKAKnmpxj8QMRGKED1Csq5";
-const TOKEN_DECIMALS = 6;
-const FEE_BASIS_POINTS = 100;
-const MAX_FEE = 10 * Math.pow(10, TOKEN_DECIMALS);
+const TOKEN_DECIMALS = 9;
+const FEE_BASIS_POINTS = 800;
+const MAX_FEE = 1000000;
 const LOCALNET_CONNECTION_URL = "http://127.0.0.1:8899";
 const DEVNET_CONNECTION_URL = "https://few-yolo-sky.solana-devnet.quiknode.pro/3852afeceff67333bb3ccaa4172b8f9e5df67e23/";
 const MAINNET_CONNECTION_URL = "https://solana-mainnet.g.alchemy.com/v2/a0Xic8r2YTu7uJ-O-Gn27SgmDTKaelhL";
@@ -179,8 +179,8 @@ const setup = async (
             network,
             connection,
             adminKeyPair,
-            false,
-            "HQMsLCGhAoCPpLrrcdnbe7UE5tpVKXdjHDEtQ27TTxLv"
+            true,
+            "FVHN3NdiUvfdzWRGji9uFzGALqSy7u2qF2zcwZcRTgmV"
         )
     }
     if (runInit) {
@@ -203,6 +203,7 @@ const setup = async (
             adminKeyPair.publicKey,
             TOKEN_2022_PROGRAM_ID
         );
+        console.log(MAX_FEE)
         const instructionData = Buffer.from(
             Uint8Array.of(
                 0,
@@ -212,7 +213,7 @@ const setup = async (
                 ...new BN(lockedStakingApy * 10).toArray("le", 8),
                 ...new BN(earlyWithdrawalFee * 10).toArray("le", 8),
                 ...new BN(FEE_BASIS_POINTS).toArray("le", 8),
-                ...new BN(MAX_FEE).toArray("le", 8),
+                ...new BN(MAX_FEE * 10**TOKEN_DECIMALS).toArray("le", 8),
             )
         )
         const initIX = new TransactionInstruction({
@@ -266,11 +267,11 @@ const setup = async (
 }
 
 setup(
-    "devnet",
-    100,
-    24*60*60,
-    500,
-    700,
-    1,
+    "mainnet",
+    10,
+    7*24*60*60,
+    2639,
+    6057,
+    10,
     true
 ).then((val) => console.log(val))
