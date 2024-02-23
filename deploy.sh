@@ -8,4 +8,4 @@ if [ "$1" == "mainnet" ]; then
 fi
 
 cargo build-bpf --bpf-out-dir=./build
-solana program deploy --program-id ./build/spl_staking-keypair.json ./build/spl_staking.so
+solana --keypair ./scripts/keys/deployer.json program deploy --program-id ./build/spl_staking-keypair.json ./build/spl_staking.so
