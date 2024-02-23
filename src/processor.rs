@@ -12,8 +12,8 @@ use solana_program::{
 };
 use solana_program::clock::Clock;
 use solana_program::rent::Rent;
-use spl_token_2022::state::{Account as TokenAccount};
-use spl_token_2022::extension::{transfer_fee::instruction::transfer_checked_with_fee};
+use spl_token_2022::state::{Account as TokenAccount, Mint};
+use spl_token_2022::extension::{BaseStateWithExtensions, StateWithExtensions, transfer_fee::{TransferFeeConfig, instruction::transfer_checked_with_fee}};
 use crate::instruction::Instruction as ContractInstruction;
 use crate::state::{ContractData, StakeType, UserData};
 
@@ -501,15 +501,9 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
-        let mut fee = (amount_out * contract_data.fee_basis_points)/10000;
-        if fee > contract_data.max_fee {
-            fee = contract_data.max_fee
-        };
+        let fee = Self::get_transfer_fee(mint_info, amount_out);
         let amount_out_with_fee = amount_out + fee;
-        let mut new_fee = (amount_out_with_fee * contract_data.fee_basis_points)/10000;
-        if new_fee > contract_data.max_fee {
-            new_fee = contract_data.max_fee
-        };
+        let new_fee = Self::get_transfer_fee(mint_info, amount_out_with_fee);
         msg!("Amount Out: {} Amount Out With Fee: {} Fee: {}", amount_out, amount_out_with_fee, new_fee);
         let token_transfer_ix = transfer_checked_with_fee(
             token_program_info.key,
@@ -549,6 +543,22 @@ impl Processor {
         ContractData::pack(contract_data, &mut contract_data_account.try_borrow_mut_data()?)?;
         Ok(())
     }
+
+    fn get_transfer_fee(
+        mint_info: &AccountInfo,
+        amount: u64
+    ) -> u64 {
+        let mint_data = mint_info.data.borrow();
+        let mint = StateWithExtensions::<Mint>::unpack(&mint_data).unwrap();
+        if let Ok(transfer_fee_config) = mint.get_extension::<TransferFeeConfig>() {
+            transfer_fee_config
+                .calculate_epoch_fee(Clock::get().unwrap().epoch, amount)
+                .ok_or(ProgramError::InvalidArgument).unwrap()
+        } else {
+            0
+        }
+    }
+
     fn perform_staking<'a>(
         program_id: &Pubkey,
         user_info: &AccountInfo<'a>,
@@ -623,13 +633,7 @@ impl Processor {
         // First time staking
         if !user_data.is_initialized {
             msg!("Staking [Info]: First time staking");
-            // Transfer tokens to contract pda for locking
-            let fee = (amount * contract_data.fee_basis_points)/10000;
-            let actual_fee = if fee > contract_data.max_fee {
-                contract_data.max_fee
-            } else {
-                fee
-            };
+            let fee = Self::get_transfer_fee(mint_account, amount);
             let transfer_tkn_ix = transfer_checked_with_fee(
                 &spl_token_2022::ID,
                 user_token_account_info.key,
@@ -639,7 +643,7 @@ impl Processor {
                 &[user_info.key],
                 amount,
                 decimals as u8,
-                actual_fee
+                fee
             )?;
             invoke(
                 &transfer_tkn_ix,
@@ -652,23 +656,8 @@ impl Processor {
                 ]
             )?;
             user_data.is_initialized = true;
-            match stake_type {
-                StakeType::NORMAL => {
-                    let total_staked = (amount * 10000)/(10000-contract_data.fee_basis_points);
-                    let fee = total_staked - amount;
-                    if fee < contract_data.max_fee {
-                        user_data.total_staked = total_staked;
-                        contract_data.total_staked = contract_data.total_staked.add(total_staked);
-                    } else {
-                        user_data.total_staked = amount + contract_data.max_fee;
-                        contract_data.total_staked = contract_data.total_staked.add(amount).add(contract_data.max_fee);
-                    }
-                },
-                StakeType::LOCKED => {
-                    user_data.total_staked = amount;
-                    contract_data.total_staked = contract_data.total_staked.add(amount);
-                }
-            }
+            user_data.total_staked = amount;
+            contract_data.total_staked = contract_data.total_staked.add(amount);
         } else {
             msg!("Staking [Info]: Re-staking");
             if stake_type as u8 != user_data.stake_type.clone() as u8 {
@@ -676,12 +665,7 @@ impl Processor {
                 return Err(ProgramError::InvalidInstructionData.into())
             }
             // Transfer tokens to contract pda
-            let fee = (amount * contract_data.fee_basis_points)/10000;
-            let actual_fee = if fee > contract_data.max_fee {
-                contract_data.max_fee
-            } else {
-                fee
-            };
+            let fee = Self::get_transfer_fee(mint_account, amount);
             let transfer_tkn_ix = transfer_checked_with_fee(
                 &spl_token_2022::ID,
                 user_token_account_info.key,
@@ -691,7 +675,7 @@ impl Processor {
                 &[user_info.key],
                 amount,
                 decimals as u8,
-                actual_fee
+                fee
             )?;
             invoke(
                 &transfer_tkn_ix,

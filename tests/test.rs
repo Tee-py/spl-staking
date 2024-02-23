@@ -196,17 +196,13 @@ async fn test_processor() {
     let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await.unwrap();
     println!("{}", user_data.is_initialized);
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
-    let mut fee = (amount * fee_basis_point)/10000;
-    if fee > max_fee {
-        fee = max_fee
-    };
     assert_eq!(user_data.is_initialized, true);
     assert_eq!(user_data.stake_type as u8, StakeType::NORMAL as u8);
     assert_eq!(user_data.lock_duration, lock_duration);
     assert_ne!(user_data.stake_ts, 0);
     assert_eq!(user_data.owner_pubkey, payer_pubkey);
-    assert_eq!(user_data.total_staked, amount + fee);
-    assert_eq!(contract_data.total_staked, amount + fee);
+    assert_eq!(user_data.total_staked, amount);
+    assert_eq!(contract_data.total_staked, amount);
     // --------------- Normal Re-staking Test ----------------------
     let re_stake_amount = 100*10u64.pow(mint_decimals as u32);
     let lock_duration: u64 = 0;
@@ -228,8 +224,8 @@ async fn test_processor() {
     // Verify Side Effects
     let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await.unwrap();
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
-    assert_eq!(user_data.total_staked, amount.add(re_stake_amount).add(fee));
-    assert_eq!(contract_data.total_staked, amount.add(re_stake_amount).add(fee));
+    assert_eq!(user_data.total_staked, amount.add(re_stake_amount));
+    assert_eq!(contract_data.total_staked, amount.add(re_stake_amount));
     // // ---------- Normal Un-staking Tests -------------
     // perform_unstake(
     //     program_id.clone(),
@@ -293,7 +289,7 @@ async fn test_processor() {
         &mut banks_client,
         recent_block_hash
     ).await;
-    let expected_total_staked = amount.add(re_stake_amount).add(stake_amount).add(fee);
+    let expected_total_staked = amount.add(re_stake_amount).add(stake_amount);
     let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await.unwrap();
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
     assert_eq!(user_data.total_staked, stake_amount);
