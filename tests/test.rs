@@ -12,7 +12,14 @@ use solana_sdk::{
 use solana_program::program_pack::{IsInitialized};
 use solana_program::rent::Rent;
 use spl_staking::state::{StakeType};
-use crate::utils::{construct_init_txn, perform_change_transfer_config, perform_stake, set_up_token_account, transfer_sol};
+use crate::utils::{
+    construct_init_txn,
+    perform_change_transfer_config,
+    perform_stake,
+    perform_unstake,
+    set_up_token_account,
+    transfer_sol
+};
 
 #[tokio::test]
 async fn test_processor() {
@@ -186,7 +193,8 @@ async fn test_processor() {
         recent_block_hash
     ).await;
     // Verify user data fields and token account balances
-    let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await;
+    let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await.unwrap();
+    println!("{}", user_data.is_initialized);
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
     let mut fee = (amount * fee_basis_point)/10000;
     if fee > max_fee {
@@ -218,7 +226,7 @@ async fn test_processor() {
         recent_block_hash
     ).await;
     // Verify Side Effects
-    let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await;
+    let user_data = get_user_data(&user_data_account_pubkey, &mut banks_client).await.unwrap();
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
     assert_eq!(user_data.total_staked, amount.add(re_stake_amount).add(fee));
     assert_eq!(contract_data.total_staked, amount.add(re_stake_amount).add(fee));
@@ -286,7 +294,7 @@ async fn test_processor() {
         recent_block_hash
     ).await;
     let expected_total_staked = amount.add(re_stake_amount).add(stake_amount).add(fee);
-    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await.unwrap();
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
     assert_eq!(user_data.total_staked, stake_amount);
     assert_eq!(user_data.stake_type as u8, StakeType::LOCKED as u8);
@@ -314,32 +322,55 @@ async fn test_processor() {
     ).await;
     let expected_total_staked = expected_total_staked.add(re_stake_amount);
     let expected_user_total_staked = user_data.total_staked.add(re_stake_amount);
-    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await.unwrap();
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
     assert_eq!(user_data.lock_duration, lock_duration);
     assert_eq!(user_data.total_staked, expected_user_total_staked);
     assert_eq!(contract_data.total_staked, expected_total_staked);
     // ---------- Locked Un-staking Tests -------------
-    // perform_unstake(
-    //     program_id.clone(),
-    //     &new_payer,
-    //     payer_token_account_keypair.pubkey(),
-    //     token_acct_keypair.pubkey(),
-    //     new_payer_data_acct_pk.clone(),
-    //     data_acct_pda.clone(),
-    //     mint_pubkey.clone(),
-    //     &mut banks_client,
-    //     recent_block_hash,
-    //     mint_decimals
-    // ).await;
-    // let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
-    // let user_token_data = get_token_account_data(&payer_token_account_keypair.pubkey(), &mut banks_client).await;
-    // let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
-    // assert_eq!(user_data.total_staked, 0);
-    // //assert_eq!(contract_data.total_staked, 0);
-    // //assert_eq!(contract_token_data.amount, 0);
-    // assert_eq!(user_token_data.amount, mint_amount);
+    perform_unstake(
+        program_id.clone(),
+        &new_payer,
+        payer_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        new_payer_data_acct_pk.clone(),
+        data_acct_pda.clone(),
+        mint_pubkey.clone(),
+        &mut banks_client,
+        recent_block_hash,
+        mint_decimals
+    ).await;
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await;
+    match user_data {
+        Ok(_data) => assert!(false),
+        Err(_e) => assert!(true)
+    };
 
+    // Stake After Un-staking
+    let stake_amount = 100*10u64.pow(mint_decimals as u32);
+    let lock_duration = 50*60*60;
+    perform_stake(
+        program_id.clone(),
+        &new_payer,
+        payer_token_account_keypair.pubkey(),
+        token_acct_keypair.pubkey(),
+        new_payer_data_acct_pk.clone(),
+        data_acct_pda.clone(),
+        mint_pubkey.clone(),
+        StakeType::LOCKED as u8,
+        stake_amount,
+        mint_decimals,
+        lock_duration,
+        &mut banks_client,
+        recent_block_hash
+    ).await;
+    let user_data = get_user_data(&new_payer_data_acct_pk, &mut banks_client).await.unwrap();
+    assert_eq!(user_data.total_staked, stake_amount);
+    assert_eq!(user_data.is_initialized, true);
+    assert_eq!(user_data.stake_type as u8, StakeType::LOCKED as u8);
+    assert_eq!(user_data.interest_accrued, 0);
+    assert_eq!(user_data.owner_pubkey, new_payer.pubkey());
+    assert_eq!(user_data.lock_duration, lock_duration);
     // ------------- Change Transfer Config Test ----------------
     let fee_basis_points = 1000;
     let max_fee = 1000 * 10u64.pow(mint_decimals as u32);

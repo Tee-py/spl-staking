@@ -460,7 +460,7 @@ impl Processor {
         let clock = Clock::get()?;
         let current_ts = clock.unix_timestamp as u64;
         let mut contract_data = ContractData::unpack_unchecked(&contract_data_account.data.borrow())?;
-        let mut user_data = UserData::unpack_from_slice(
+        let user_data = UserData::unpack_from_slice(
             &user_data_account.data.borrow()
         )?;
 
@@ -543,11 +543,9 @@ impl Processor {
         msg!("Sent tokens");
         // Reset User Account and Contract Account
         contract_data.total_staked = contract_data.total_staked.saturating_sub(user_data.total_staked);
-        user_data.total_staked = 0;
-        user_data.interest_accrued = 0;
-        user_data.stake_ts = 0;
-
-        UserData::pack(user_data, &mut user_data_account.try_borrow_mut_data()?)?;
+        let data_lamports = user_data_account.lamports();
+        **user_data_account.try_borrow_mut_lamports()? = 0;
+        **contract_data_account.try_borrow_mut_lamports()? += data_lamports;
         ContractData::pack(contract_data, &mut contract_data_account.try_borrow_mut_data()?)?;
         Ok(())
     }
@@ -673,6 +671,10 @@ impl Processor {
             }
         } else {
             msg!("Staking [Info]: Re-staking");
+            if stake_type as u8 != user_data.stake_type.clone() as u8 {
+                msg!("Staking [Info]: Stake type mismatch");
+                return Err(ProgramError::InvalidInstructionData.into())
+            }
             // Transfer tokens to contract pda
             let fee = (amount * contract_data.fee_basis_points)/10000;
             let actual_fee = if fee > contract_data.max_fee {

@@ -8,6 +8,7 @@ use solana_sdk::{
 };
 use solana_program::program_pack::{Pack};
 use solana_program::{system_instruction, system_program};
+use solana_program::program_error::ProgramError;
 use solana_program::rent::Rent;
 use solana_program::sysvar::rent;
 use spl_token_2022::state::{Account as TokenAccount, Mint};
@@ -15,13 +16,16 @@ use spl_token_2022::extension::ExtensionType;
 use spl_staking::state::{ContractData, UserData};
 
 
-pub async fn get_user_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> UserData {
+pub async fn get_user_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> Result<UserData, ProgramError> {
     let user_account = banks_client
         .get_account(pubkey.clone())
         .await
-        .expect("get_account")
-        .expect("user data account not found");
-    UserData::unpack_from_slice(&user_account.data).unwrap()
+        .expect("get_account");
+    match user_account {
+        Some(acct) => UserData::unpack_from_slice(&acct.data),
+        None => Err(ProgramError::InvalidAccountData)
+    }
+
 }
 
 pub async fn get_contract_data(pubkey: &Pubkey, banks_client: &mut BanksClient) -> ContractData {
