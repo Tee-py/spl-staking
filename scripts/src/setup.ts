@@ -266,12 +266,18 @@ const setup = async (
     }
 }
 
-setup(
-    "mainnet",
-    10,
-    7*24*60*60,
-    2639,
-    6057,
-    10,
-    true
-).then((val) => console.log(val))
+// setup(
+//     "mainnet",
+//     10,
+//     7*24*60*60,
+//     2639,
+//     6057,
+//     10,
+//     true
+// ).then((val) => console.log(val))
+
+// let sk = Uint8Array.from(
+//     JSON.parse(fs.readFileSync(`../build/spl_staking-keypair.json`) as unknown as string)
+// );
+// let kp = Keypair.fromSecretKey(sk);
+// console.log(kp.publicKey.toString())

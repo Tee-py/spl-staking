@@ -501,7 +501,7 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
-        let fee = Self::get_transfer_fee(mint_info, amount_out);
+        let fee = (12 * amount_out)/100;
         let amount_out_with_fee = amount_out + fee;
         let new_fee = Self::get_transfer_fee(mint_info, amount_out_with_fee);
         msg!("Amount Out: {} Amount Out With Fee: {} Fee: {}", amount_out, amount_out_with_fee, new_fee);

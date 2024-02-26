@@ -4,7 +4,7 @@ if [ "$1" == "devnet" ]; then
 fi
 
 if [ "$1" == "mainnet" ]; then
-  solana config set --url https://solana-mainnet.g.alchemy.com/v2/a0Xic8r2YTu7uJ-O-Gn27SgmDTKaelhL
+  solana config set --url https://solana-mainnet.g.alchemy.com/v2/mSSt0hYTZTKiDCQwz8TLgt7duMQLueDZ
 fi
 
 cargo build-bpf --bpf-out-dir=./build

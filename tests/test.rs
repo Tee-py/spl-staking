@@ -37,8 +37,8 @@ async fn test_processor() {
     let payer_pubkey = payer.pubkey();
     let mint_pubkey = token_mint.pubkey();
     let mint_decimals = 6_u64;
-    let fee_basis_point: u64 = 100;
-    let max_fee: u64 = 10 * 10u64.pow(mint_decimals as u32);
+    let fee_basis_point: u64 = 800;
+    let max_fee: u64 = 1000000 * 10u64.pow(mint_decimals as u32);
     let data_acct_pda_seeds: &[&[u8]] = &[b"spl_staking", &payer_pubkey.as_ref(), &mint_pubkey.as_ref()];
     let (data_acct_pda, _data_pda_bump) = Pubkey::find_program_address(
         data_acct_pda_seeds,
@@ -64,7 +64,7 @@ async fn test_processor() {
     let minimum_lock_duration: u64 = 100; // 100 seconds
     let normal_staking_apy: u64 = 100; // 10% per year
     let locked_staking_apy: u64 = 200; // 20% per year
-    let early_withdrawal_fee: u64 = 50; // 5% per withdrawal
+    let early_withdrawal_fee: u64 = 100; // 5% per withdrawal
     let mut transaction = construct_init_txn(
         minimum_stake_amount,
         minimum_lock_duration,
@@ -255,7 +255,7 @@ async fn test_processor() {
     );
     let payer_token_account_keypair = Keypair::new();
     let mint_amount = 1000 * 10u64.pow(mint_decimals as u32);
-    let stake_amount = 50*10u64.pow(mint_decimals as u32);
+    let stake_amount = 500*10u64.pow(mint_decimals as u32);
     let lock_duration = 24*60*60;
     transfer_sol(
         &payer,
@@ -300,7 +300,7 @@ async fn test_processor() {
     assert_eq!(user_data.owner_pubkey, new_payer.pubkey());
     assert_eq!(contract_data.total_staked, expected_total_staked);
     // ----------- Locked Re-staking Test --------------------
-    let re_stake_amount = 10*10u64.pow(mint_decimals as u32);
+    let re_stake_amount = 100*10u64.pow(mint_decimals as u32);
     perform_stake(
         program_id.clone(),
         &new_payer,
