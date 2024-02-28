@@ -471,10 +471,15 @@ impl Processor {
                     msg!("Staking [Info]: Cannot Unstake before 24 hrs");
                     return Err(ProgramError::InvalidAccountData.into());
                 }
-                let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
+                let mut interest_accrued = (
+                    (apy as u128 * user_data.total_staked as u128 * stake_duration as u128)/31536000000_u128
+                ) as u64;
                 contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
                 interest_accrued = interest_accrued.add(user_data.interest_accrued);
-                msg!("Staking[Info]: Interest Accrued: {}\nStake Duration: {}", interest_accrued, stake_duration);
+                msg!(
+                    "Staking[Info]: \nTotal Staked: {}\n Interest Accrued: {}\nStake Duration: {}",
+                    user_data.total_staked, interest_accrued, stake_duration
+                );
                 let amount_out = user_data.total_staked.add(interest_accrued);
                 amount_out
             },
@@ -482,13 +487,15 @@ impl Processor {
                 let stake_duration = current_ts - user_data.stake_ts;
                 let amount_out: u64;
                 if stake_duration >= user_data.lock_duration {
-                    let mut interest_accrued = (apy * user_data.total_staked * stake_duration)/31536000000;
+                    let mut interest_accrued = (
+                        (apy as u128 * user_data.total_staked as u128 * stake_duration as u128)/31536000000_u128
+                    ) as u64;
                     contract_data.total_earned = contract_data.total_earned.saturating_add(interest_accrued);
                     interest_accrued = interest_accrued.add(user_data.interest_accrued);
                     amount_out = interest_accrued.add(user_data.total_staked);
                 } else {
-                    let early_unstake_charge = (contract_data.early_withdrawal_fee * user_data.total_staked)/1000;
-                    amount_out = user_data.total_staked.saturating_sub(early_unstake_charge);
+                    let early_unstake_charge = (contract_data.early_withdrawal_fee as u128 * user_data.total_staked as u128)/1000_u128;
+                    amount_out = (user_data.total_staked as u128 - early_unstake_charge) as u64;
                 }
                 msg!("Staking [Info]: Amount Out: {} Total Staked: {}", amount_out, user_data.total_staked);
                 amount_out
@@ -501,7 +508,7 @@ impl Processor {
             contract_data.stake_token_mint.as_ref()
         ];
         let (authority_pda, pda_bump) = Pubkey::find_program_address(seeds, program_id);
-        let fee = (12 * amount_out)/100;
+        let fee = ((12 * amount_out as u128)/100) as u64;
         let amount_out_with_fee = amount_out + fee;
         let new_fee = Self::get_transfer_fee(mint_info, amount_out_with_fee);
         msg!("Amount Out: {} Amount Out With Fee: {} Fee: {}", amount_out, amount_out_with_fee, new_fee);
@@ -694,6 +701,7 @@ impl Processor {
             user_data.interest_accrued = user_data.interest_accrued.add(interest_accrued);
             user_data.total_staked = user_data.total_staked.add(amount);
             user_data.stake_ts = current_ts;
+            user_data.lock_duration = lock_duration;
             contract_data.total_staked = contract_data.total_staked.add(amount);
             contract_data.total_earned = contract_data.total_earned.add(interest_accrued);
         }
