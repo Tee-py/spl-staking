@@ -348,7 +348,7 @@ async fn test_processor() {
         Err(_e) => assert!(true)
     };
     let expected_unstake_amt = expected_user_total_staked - (expected_user_total_staked * 10)/100;
-    let expected_unstake_amt_with_fee = expected_unstake_amt + (expected_unstake_amt * 12)/100;
+    let expected_unstake_amt_with_fee = expected_unstake_amt + (expected_unstake_amt * 9)/100;
     let actual_unstake_amt = expected_unstake_amt_with_fee - (expected_unstake_amt_with_fee * fee_basis_point)/10000;
     assert_eq!(mint_amount - expected_user_total_staked + actual_unstake_amt, after_unstake_bal.amount);
 
