@@ -696,7 +696,9 @@ impl Processor {
             )?;
             // Calculate the interest accrued from stake_ts till now
             let stake_interval = current_ts - user_data.stake_ts;
-            let interest_accrued = (apy * user_data.total_staked * stake_interval)/31536000000;
+            let interest_accrued = (
+                (apy as u128 * user_data.total_staked as u128 * stake_interval as u128)/31536000000_u128
+            ) as u64;
             msg!("Staking[Info]: Interest Accrued: {}\nStake Interval: {}", interest_accrued, stake_interval);
             user_data.interest_accrued = user_data.interest_accrued.add(interest_accrued);
             user_data.total_staked = user_data.total_staked.add(amount);
