@@ -12,14 +12,7 @@ use solana_sdk::{
 use solana_program::program_pack::{IsInitialized};
 use solana_program::rent::Rent;
 use spl_staking::state::{StakeType};
-use crate::utils::{
-    construct_init_txn,
-    perform_change_transfer_config,
-    perform_stake,
-    perform_unstake,
-    set_up_token_account,
-    transfer_sol
-};
+use crate::utils::{construct_init_txn, perform_stake, perform_unstake, perform_update_apy, set_up_token_account, transfer_sol};
 
 #[tokio::test]
 async fn test_processor() {
@@ -377,19 +370,19 @@ async fn test_processor() {
     assert_eq!(user_data.interest_accrued, 0);
     assert_eq!(user_data.owner_pubkey, new_payer.pubkey());
     assert_eq!(user_data.lock_duration, lock_duration);
-    // ------------- Change Transfer Config Test ----------------
-    let fee_basis_points = 1000;
-    let max_fee = 1000 * 10u64.pow(mint_decimals as u32);
-    perform_change_transfer_config(
+    // ------------- Update APY Test ----------------
+    let normal_staking_apy = 30000;
+    let locked_staking_apy = 40000;
+    perform_update_apy(
         program_id,
         &payer,
         data_acct_pda.clone(),
-        fee_basis_points,
-        max_fee,
+        normal_staking_apy,
+        locked_staking_apy,
         &mut banks_client,
         recent_block_hash
     ).await;
     let contract_data = get_contract_data(&data_acct_pda, &mut banks_client).await;
-    assert_eq!(contract_data.fee_basis_points, fee_basis_points);
-    assert_eq!(contract_data.max_fee, max_fee)
+    assert_eq!(contract_data.normal_staking_apy, normal_staking_apy);
+    assert_eq!(contract_data.locked_staking_apy, locked_staking_apy)
 }

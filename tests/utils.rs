@@ -347,18 +347,18 @@ pub async fn perform_unstake(
     banks_client.process_transaction(unstake_txn).await.unwrap();
 }
 
-pub async fn perform_change_transfer_config(
+pub async fn perform_update_apy(
     program_id: Pubkey,
     payer: &Keypair,
     contract_data_account: Pubkey,
-    fee_basis_points: u64,
-    max_fee: u64,
+    normal_staking_apy: u64,
+    locked_staking_apy: u64,
     banks_client: &mut BanksClient,
     recent_block_hash: Hash
 ) {
     let mut instruction_data = vec![3];
-    instruction_data.extend(fee_basis_points.to_le_bytes().iter());
-    instruction_data.extend(max_fee.to_le_bytes().iter());
+    instruction_data.extend(normal_staking_apy.to_le_bytes().iter());
+    instruction_data.extend(locked_staking_apy.to_le_bytes().iter());
 
     let mut txn = Transaction::new_with_payer(
         &[
