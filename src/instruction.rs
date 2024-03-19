@@ -75,6 +75,19 @@ pub enum Instruction {
     ChangeTransferFeeConfig {
         fee_basis_points: u64,
         max_fee: u64
+    },
+
+    /// Change normal and locked staking apy
+    ///
+    /// Accounts Expected
+    ///
+    /// 1. `[Signer]` The admin of the contract data account
+    /// 2. `[writable]` The contract data account
+    UpdateAPY {
+        /// APY For normal staking (decimals = 1)
+        normal_staking_apy: u64,
+        /// APY For locked staking (decimals = 1)
+        locked_staking_apy: u64
     }
 }
 
@@ -139,7 +152,15 @@ impl Instruction {
                         fee_basis_points: Self::unpack_u64(fee_b_pt_dst)?,
                         max_fee: Self::unpack_u64(max_fee_dst)?
                     }
-                }
+                },
+                4 => {
+                    let rest = array_ref![rest, 0, 16];
+                    let (normal_apy_dst, locked_apy_dst) = array_refs![rest, 8, 8];
+                    Self::UpdateAPY {
+                        normal_staking_apy: Self::unpack_u64(normal_apy_dst)?,
+                        locked_staking_apy: Self::unpack_u64(locked_apy_dst)?
+                    }
+                },
                 _ => {
                     return Err(ProgramError::InvalidInstructionData.into())
                 },
