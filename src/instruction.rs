@@ -66,17 +66,6 @@ pub enum Instruction {
         decimals: u64
     },
 
-    /// Change percentage tax for token 2022 mint
-    ///
-    /// Accounts Expected
-    ///
-    /// 1. `[Signer]` The admin of the contract data account
-    /// 2. `[writable]` The contract data account
-    ChangeTransferFeeConfig {
-        fee_basis_points: u64,
-        max_fee: u64
-    },
-
     /// Change normal and locked staking apy
     ///
     /// Accounts Expected
@@ -143,17 +132,6 @@ impl Instruction {
                     }
                 },
                 3 => {
-                    let rest = array_ref![rest, 0, 16];
-                    let (
-                        fee_b_pt_dst,
-                        max_fee_dst
-                    ) = array_refs![rest, 8, 8];
-                    Self::ChangeTransferFeeConfig {
-                        fee_basis_points: Self::unpack_u64(fee_b_pt_dst)?,
-                        max_fee: Self::unpack_u64(max_fee_dst)?
-                    }
-                },
-                4 => {
                     let rest = array_ref![rest, 0, 16];
                     let (normal_apy_dst, locked_apy_dst) = array_refs![rest, 8, 8];
                     Self::UpdateAPY {
