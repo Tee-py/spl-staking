@@ -19,62 +19,13 @@ import {
     createInitializeTransferFeeConfigInstruction,
     createInitializeMintInstruction
 } from "@solana/spl-token";
-import fs from "fs";
-import { decode } from 'bs58';
+import {
+    PROGRAM_ID, MAX_FEE, FEE_BASIS_POINTS,
+    TOKEN_DECIMALS, DEVNET_CONNECTION_URL,
+    MAINNET_CONNECTION_URL, LOCALNET_CONNECTION_URL
+} from "./constant";
 
-const PROGRAM_ID = "9Ef7uzrdsFCjb3jCqR9YERTKAKnmpxj8QMRGKED1Csq5";
-const TOKEN_DECIMALS = 9;
-const FEE_BASIS_POINTS = 800;
-const MAX_FEE = 1000000;
-const LOCALNET_CONNECTION_URL = "http://127.0.0.1:8899";
-const DEVNET_CONNECTION_URL = "https://few-yolo-sky.solana-devnet.quiknode.pro/3852afeceff67333bb3ccaa4172b8f9e5df67e23/";
-const MAINNET_CONNECTION_URL = "https://solana-mainnet.g.alchemy.com/v2/a0Xic8r2YTu7uJ-O-Gn27SgmDTKaelhL";
-
-
-const getPublicKey = (name: string, network: string = "localnet") =>
-    new PublicKey(
-        JSON.parse(fs.readFileSync(`./keys/${network}/${name}_pub.json`) as unknown as string)
-    );
-
-const getPrivateKey = (name: string, network: string = "localnet") =>
-    Uint8Array.from(
-        JSON.parse(fs.readFileSync(`./keys/${network}/${name}.json`) as unknown as string)
-    );
-
-export const getKeypair = (name: string, network: string = "localnet", isSecret?: boolean) => {
-    if (isSecret) {
-        const decoded = decode(JSON.parse(fs.readFileSync(`./keys/${network}/${name}.json`) as unknown as string));
-        return Keypair.fromSecretKey(decoded);
-    }
-    return new Keypair({
-        publicKey: getPublicKey(name, network).toBytes(),
-        secretKey: getPrivateKey(name, network),
-    });
-}
-
-// const getKeypair = (name: string, network: string = "localnet") =>
-//     new Keypair({
-//         publicKey: getPublicKey(name, network).toBytes(),
-//         secretKey: getPrivateKey(name, network),
-//     });
-
-const writePublicKey = (publicKey: PublicKey, name: string, network: string = "localnet") => {
-    const path = `./keys/${network}/${name}_pub.json`
-    console.log(`Writing Public Key To: ${path}`)
-    fs.writeFileSync(
-        path,
-        JSON.stringify(publicKey.toString())
-    );
-};
-
-const writeSecretKey = (secretKey: Uint8Array, name: string, network: string = "localnet") => {
-    const path = `./keys/${network}/${name}.json`
-    console.log(`Writing Secret Key To: ${path}`)
-    fs.writeFileSync(
-        path,
-        `[${secretKey.toString()}]`
-    );
-};
+import {getCluster, getKeypair, getPublicKey, writePublicKey, writeSecretKey} from "./utils";
 
 const setupMint = async (
     name: string,
@@ -155,15 +106,8 @@ const setup = async (
     earlyWithdrawalFee: number,
     runInit: boolean = true
 ) => {
-    let rpc;
-    if (network == "devnet") {
-        rpc =DEVNET_CONNECTION_URL
-    } else if (network == "localnet") {
-        rpc = LOCALNET_CONNECTION_URL
-    } else {
-        rpc = MAINNET_CONNECTION_URL
-    }
-    const connection = new Connection(rpc, "confirmed");
+    let cluster = getCluster(network);
+    const connection = new Connection(cluster, "confirmed");
     const programId = new PublicKey(PROGRAM_ID);
     let tokenAccountKeypair = new Keypair();
     let adminKeyPair: Keypair;
