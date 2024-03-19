@@ -433,6 +433,42 @@ impl Processor {
         Ok(())
     }
 
+    fn update_apy(
+        _program_id: &Pubkey,
+        accounts: &[AccountInfo],
+        normal_staking_apy: u64,
+        locked_staking_apy: u64
+    ) -> ProgramResult {
+        // Get all accounts sent to the instruction
+        let accounts_info_iter = &mut accounts.iter();
+        let admin = next_account_info(accounts_info_iter)?;
+        let data_account = next_account_info(accounts_info_iter)?;
+
+        // perform necessary checks
+        if !admin.is_signer {
+            return Err(ProgramError::MissingRequiredSignature.into());
+        }
+
+        if !data_account.is_writable {
+            return Err(ProgramError::InvalidAccountData.into());
+        }
+
+        if normal_staking_apy < 1 || locked_staking_apy < 1 {
+            msg!("Staking [Error]: Invalid transfer config");
+            return Err(ProgramError::InvalidInstructionData.into())
+        }
+
+        let mut contract_data = ContractData::unpack_from_slice(&data_account.data.borrow())?;
+        if &contract_data.admin_pubkey != admin.key {
+            msg!("Staking [Error]: Invalid contract data");
+            return Err(ProgramError::InvalidAccountData.into())
+        }
+        contract_data.normal_staking_apy = normal_staking_apy;
+        contract_data.locked_staking_apy = locked_staking_apy;
+        ContractData::pack(contract_data, &mut data_account.try_borrow_mut_data()?)?;
+        Ok(())
+    }
+
     fn perform_unstake<'a>(
         program_id: &Pubkey,
         user_info: &AccountInfo<'a>,
